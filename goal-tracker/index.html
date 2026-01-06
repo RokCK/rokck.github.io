@@ -46,14 +46,23 @@
 
           const loadProgress = async () => {
             try {
+              console.log('Intentando cargar desde:', API_URL);
               const response = await fetch(API_URL);
-              if (!response.ok) throw new Error('Error al cargar datos');
-              const data = await response.json();
+              console.log('Response status:', response.status);
+              console.log('Response ok:', response.ok);
+              
+              const text = await response.text();
+              console.log('Response text:', text);
+              
+              if (!response.ok) throw new Error('Error HTTP: ' + response.status);
+              
+              const data = JSON.parse(text);
+              console.log('Data parsed:', data);
               setProgress(data);
               setError(null);
             } catch (err) {
-              console.error('Error:', err);
-              setError('No se pudieron cargar los datos');
+              console.error('Error completo:', err);
+              setError('Error: ' + err.message);
             } finally {
               setIsLoading(false);
             }
@@ -61,6 +70,7 @@
 
           const saveProgress = async (newProgress) => {
             try {
+              console.log('Guardando:', newProgress);
               const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: {
@@ -68,11 +78,15 @@
                 },
                 body: JSON.stringify(newProgress)
               });
+              
+              const text = await response.text();
+              console.log('Save response:', text);
+              
               if (!response.ok) throw new Error('Error al guardar');
               setError(null);
             } catch (err) {
               console.error('Error al guardar:', err);
-              setError('Error al guardar datos');
+              setError('Error al guardar datos: ' + err.message);
             }
           };
 
@@ -176,7 +190,7 @@
                 </h1>
                 
                 {error && (
-                  <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                  <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
                     {error}
                   </div>
                 )}
