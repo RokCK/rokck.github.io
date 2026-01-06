@@ -8,6 +8,8 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Incluir Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -29,7 +31,13 @@
           const [isLoading, setIsLoading] = useState(true);
           const [error, setError] = useState(null);
 
-          const API_URL = 'https://rokck.free.nf/goal-tracker/api/progress.php';
+          // Configuración de Supabase
+          const SUPABASE_URL = 'https://zgohawnfwbhyuubgzhit.supabase.co';
+          const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpnb2hhd25md2JoeXV1Ymd6aGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2NjExNTQsImV4cCI6MjA4MzIzNzE1NH0.3AF50DVfjnXhlx_chrPFeVXtnhRvFPhreZFq30y1mSY';
+          const USER_ID = 'default_user';
+
+          // Crear cliente Supabase
+          const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
           const categories = [
             { name: 'Health', color: '#FF6B6B', colorOpaque: '#FFB0B0', id: 'health' },
@@ -46,23 +54,83 @@
 
           const loadProgress = async () => {
             try {
-              console.log('Intentando cargar desde:', API_URL);
-              const response = await fetch(API_URL);
-              console.log('Response status:', response.status);
-              console.log('Response ok:', response.ok);
+              console.log('Cargando progreso desde Supabase...');
               
-              const text = await response.text();
-              console.log('Response text:', text);
+              // Obtener los datos del usuario 'default_user' de la tabla 'progress'
+              const { data, error: supabaseError } = await supabase
+                .from('progress')
+                .select('*')
+                .eq('user_id', USER_ID)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+              if (supabaseError) {
+                // Si no hay datos, crear un registro inicial
+                if (supabaseError.code === 'PGRST116') {
+                  console.log('No se encontraron datos, creando registro inicial...');
+                  await createInitialProgress();
+                  return;
+                }
+                throw supabaseError;
+              }
+
+              console.log('Datos cargados:', data);
               
-              if (!response.ok) throw new Error('Error HTTP: ' + response.status);
+              // Mapear los datos de Supabase al estado local
+              if (data) {
+                setProgress({
+                  health: data.health || 0,
+                  posts: data.posts || 0,
+                  books: data.books || 0,
+                  learning: data.learning || 0,
+                  quests: data.quests || 0,
+                  money: data.money || 0
+                });
+              }
               
-              const data = JSON.parse(text);
-              console.log('Data parsed:', data);
-              setProgress(data);
               setError(null);
             } catch (err) {
-              console.error('Error completo:', err);
-              setError('Error: ' + err.message);
+              console.error('Error al cargar:', err);
+              setError('Error al cargar datos: ' + err.message);
+            } finally {
+              setIsLoading(false);
+            }
+          };
+
+          const createInitialProgress = async () => {
+            try {
+              const initialData = {
+                user_id: USER_ID,
+                health: 0,
+                posts: 0,
+                books: 0,
+                learning: 0,
+                quests: 0,
+                money: 0
+              };
+
+              const { data, error } = await supabase
+                .from('progress')
+                .insert([initialData])
+                .select()
+                .single();
+
+              if (error) throw error;
+
+              console.log('Registro inicial creado:', data);
+              setProgress({
+                health: 0,
+                posts: 0,
+                books: 0,
+                learning: 0,
+                quests: 0,
+                money: 0
+              });
+              setError(null);
+            } catch (err) {
+              console.error('Error al crear registro inicial:', err);
+              setError('Error al crear datos iniciales: ' + err.message);
             } finally {
               setIsLoading(false);
             }
@@ -70,19 +138,54 @@
 
           const saveProgress = async (newProgress) => {
             try {
-              console.log('Guardando:', newProgress);
-              const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(newProgress)
-              });
+              console.log('Guardando en Supabase:', newProgress);
               
-              const text = await response.text();
-              console.log('Save response:', text);
+              // Buscar el registro existente del usuario
+              const { data: existingData, error: fetchError } = await supabase
+                .from('progress')
+                .select('id')
+                .eq('user_id', USER_ID)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+              if (fetchError && fetchError.code !== 'PGRST116') {
+                throw fetchError;
+              }
+
+              const updateData = {
+                user_id: USER_ID,
+                health: newProgress.health,
+                posts: newProgress.posts,
+                books: newProgress.books,
+                learning: newProgress.learning,
+                quests: newProgress.quests,
+                money: newProgress.money,
+                updated_at: new Date().toISOString()
+              };
+
+              let result;
               
-              if (!response.ok) throw new Error('Error al guardar');
+              if (existingData && existingData.id) {
+                // Actualizar registro existente
+                result = await supabase
+                  .from('progress')
+                  .update(updateData)
+                  .eq('id', existingData.id)
+                  .select()
+                  .single();
+              } else {
+                // Crear nuevo registro
+                result = await supabase
+                  .from('progress')
+                  .insert([updateData])
+                  .select()
+                  .single();
+              }
+
+              if (result.error) throw result.error;
+              
+              console.log('Datos guardados exitosamente:', result.data);
               setError(null);
             } catch (err) {
               console.error('Error al guardar:', err);
