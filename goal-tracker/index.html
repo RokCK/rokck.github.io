@@ -46,12 +46,15 @@
           const [tempCategories, setTempCategories] = useState([...DEFAULT_CATEGORIES]);
 
           useEffect(() => {
+            // Cargar usuario desde localStorage si existe
             const savedUsername = localStorage.getItem('goal_tracker_user');
             if (savedUsername) {
               setUsername(savedUsername);
               loadUserData(savedUsername);
             } else {
+              // Mostrar modal de login si no hay usuario guardado
               setIsLoading(false);
+              setTimeout(() => setShowLoginModal(true), 300);
             }
           }, []);
 
@@ -63,24 +66,48 @@
               return;
             }
 
-            if (user !== 'rokck') {
-              setLoginError('Usuario no autorizado');
-              return;
-            }
+            try {
+              // Verificar si el usuario existe en la tabla 'users'
+              const { data: userData, error: userError } = await supabaseClient
+                .from('users')
+                .select('*')
+                .eq('username', user)
+                .single();
 
-            localStorage.setItem('goal_tracker_user', user);
-            setUsername(user);
-            setShowLoginModal(false);
-            setLoginError('');
-            
-            await loadUserData(user);
+              if (userError) {
+                if (userError.code === 'PGRST116') {
+                  setLoginError('Usuario no encontrado');
+                } else {
+                  throw userError;
+                }
+                return;
+              }
+
+              if (!userData || !userData.is_active) {
+                setLoginError('Usuario no autorizado o inactivo');
+                return;
+              }
+
+              // Guardar sesión
+              localStorage.setItem('goal_tracker_user', user);
+              setUsername(user);
+              setShowLoginModal(false);
+              setLoginError('');
+              setInputUsername('');
+              
+              await loadUserData(user);
+              
+            } catch (err) {
+              console.error('Error en login:', err);
+              setLoginError('Error al iniciar sesión: ' + err.message);
+            }
           };
 
           const loadUserData = async (user) => {
             try {
               setIsLoading(true);
               
-              // Buscar configuración del usuario
+              // Buscar configuración del usuario en 'user_config'
               const { data: configData, error: configError } = await supabaseClient
                 .from('user_config')
                 .select('*')
@@ -109,7 +136,7 @@
               const userCategories = JSON.parse(configData.categories);
               setCategories(userCategories);
 
-              // Cargar progreso
+              // Cargar progreso desde 'progress'
               const { data: progressData, error: progressError } = await supabaseClient
                 .from('progress')
                 .select('*')
@@ -155,17 +182,18 @@
                 }
               }
 
-              // Guardar configuración
+              // Guardar configuración en 'user_config'
               const { error: configError } = await supabaseClient
                 .from('user_config')
                 .upsert({
                   user_id: username,
-                  categories: JSON.stringify(tempCategories)
+                  categories: JSON.stringify(tempCategories),
+                  updated_at: new Date().toISOString()
                 });
 
               if (configError) throw configError;
 
-              // Inicializar progreso
+              // Inicializar progreso en 'progress'
               const initialProgress = {};
               tempCategories.forEach(cat => {
                 initialProgress[cat.id] = 0;
@@ -175,7 +203,8 @@
                 .from('progress')
                 .upsert({
                   user_id: username,
-                  progress_data: JSON.stringify(initialProgress)
+                  progress_data: JSON.stringify(initialProgress),
+                  updated_at: new Date().toISOString()
                 });
 
               if (progressError) throw progressError;
@@ -207,7 +236,8 @@
                 .from('progress')
                 .upsert({
                   user_id: username,
-                  progress_data: JSON.stringify(newProgress)
+                  progress_data: JSON.stringify(newProgress),
+                  updated_at: new Date().toISOString()
                 });
 
               if (error) throw error;
@@ -224,18 +254,19 @@
             setProgress({});
             setCategories(DEFAULT_CATEGORIES);
             setShowInfoModal(false);
+            setShowLoginModal(true);
           };
 
           const handleAddClick = () => {
-          if (!username) {
-            setShowLoginModal(true);
-          } else if (isFirstTimeSetup) {
-            setTempCategories([...DEFAULT_CATEGORIES]);
-            setShowConfigModal(true);
-          } else {
-            setShowModal(true);
-          }
-        };
+            if (!username) {
+              setShowLoginModal(true);
+            } else if (isFirstTimeSetup) {
+              setTempCategories([...DEFAULT_CATEGORIES]);
+              setShowConfigModal(true);
+            } else {
+              setShowModal(true);
+            }
+          };
 
           const handleCategorySelect = (categoryId) => {
             const category = categories.find(c => c.id === categoryId);
@@ -251,7 +282,7 @@
           };
 
           const drawPieSlice = () => {
-            const totalSegments = 6;
+            const totalSegments = categories.length;
             const anglePerSegment = 360 / totalSegments;
             const startAngle = -90;
             
@@ -387,7 +418,7 @@
                         />
                       </div>
                       <span className="text-sm font-medium text-gray-600 w-12 text-right">
-                        {Math.round(((progress[cat.id] || 0) / cat.hops) * 100)}%
+                        {(progress[cat.id] || 0)}/{cat.hops}
                       </span>
                     </div>
                   ))}
@@ -411,7 +442,7 @@
               {showLoginModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                   <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
-                    <h2 className="text-xl font-bold mb-4 text-gray-800">Iniciar Sesión</h2>
+                    <h2 className="text-xl font-bold mb-4 text-gray-800">Ingresar Usuario</h2>
                     
                     <input
                       type="text"
@@ -501,6 +532,7 @@
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                   <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
                     <h2 className="text-xl font-bold mb-2 text-gray-800 text-center">Simple Goal Tracker</h2>
+                    <p className="text-sm text-gray-600 text-center mb-4">Usuario: {username}</p>
                     <p className="text-sm text-gray-600 text-center mb-6">Developed by Carlos Galindo</p>
                     
                     <button
