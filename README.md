@@ -1,4 +1,4 @@
 # rokck.github.io
 
-[Goal Tracker](https://rokck.github.io/goal-tracker)
-[Goal Tracker Pro](https://rokck.github.io/goal-tracker-pro)
+1. [Goal Tracker](https://rokck.github.io/goal-tracker)
+2. [Goal Tracker Pro](https://rokck.github.io/goal-tracker-pro)
