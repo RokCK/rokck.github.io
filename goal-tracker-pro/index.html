@@ -33,8 +33,12 @@
           });
 
           const [showModal, setShowModal] = useState(false);
+          const [showLoginModal, setShowLoginModal] = useState(false);
           const [isLoading, setIsLoading] = useState(true);
           const [error, setError] = useState(null);
+          const [username, setUsername] = useState('');
+          const [inputUsername, setInputUsername] = useState('');
+          const [loginError, setLoginError] = useState('');
 
           const categories = [
             { name: 'Health', color: '#FF6B6B', colorOpaque: '#FFB0B0', id: 'health' },
@@ -46,15 +50,59 @@
           ];
 
           useEffect(() => {
-            loadProgress();
+            // Verificar si hay usuario guardado
+            const savedUsername = localStorage.getItem('goal_tracker_user');
+            if (savedUsername) {
+              setUsername(savedUsername);
+              loadProgress(savedUsername);
+            } else {
+              setIsLoading(false);
+            }
           }, []);
 
-          const loadProgress = async () => {
+          const handleLogin = async () => {
+            const user = inputUsername.trim().toLowerCase();
+            
+            if (!user) {
+              setLoginError('Por favor ingresa un usuario');
+              return;
+            }
+
+            if (user !== 'rokck') {
+              setLoginError('Usuario no autorizado');
+              return;
+            }
+
+            // Guardar usuario en localStorage
+            localStorage.setItem('goal_tracker_user', user);
+            setUsername(user);
+            setShowLoginModal(false);
+            setLoginError('');
+            
+            // Cargar progreso del usuario
+            await loadProgress(user);
+          };
+
+          const handleLogout = () => {
+            localStorage.removeItem('goal_tracker_user');
+            setUsername('');
+            setProgress({
+              health: 0,
+              posts: 0,
+              books: 0,
+              learning: 0,
+              quests: 0,
+              money: 0
+            });
+          };
+
+          const loadProgress = async (user) => {
             try {
+              setIsLoading(true);
               const { data, error } = await supabaseClient
                 .from('progress')
                 .select('*')
-                .eq('user_id', 'default_user')
+                .eq('user_id', user)
                 .single();
 
               if (error) {
@@ -63,7 +111,7 @@
                   const { data: newData, error: insertError } = await supabaseClient
                     .from('progress')
                     .insert([{ 
-                      user_id: 'default_user',
+                      user_id: user,
                       health: 0,
                       posts: 0,
                       books: 0,
@@ -118,13 +166,21 @@
                   money: newProgress.money,
                   updated_at: new Date().toISOString()
                 })
-                .eq('user_id', 'default_user');
+                .eq('user_id', username);
 
               if (error) throw error;
               setError(null);
             } catch (err) {
               console.error('Error al guardar:', err);
               setError('Error al guardar: ' + err.message);
+            }
+          };
+
+          const handleAddClick = () => {
+            if (!username) {
+              setShowLoginModal(true);
+            } else {
+              setShowModal(true);
             }
           };
 
@@ -194,7 +250,7 @@
                   stroke="#E0E0E0"
                   strokeWidth="2"
                   className="cursor-pointer hover:fill-gray-50 transition-colors"
-                  onClick={() => setShowModal(true)}
+                  onClick={handleAddClick}
                 />
                 
                 <text
@@ -223,13 +279,29 @@
           return (
             <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
               <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-                <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">
-                  Goal Tracker
-                </h1>
+                <div className="flex justify-between items-center mb-6">
+                  <h1 className="text-2xl font-bold text-gray-800">
+                    Goal Tracker
+                  </h1>
+                  {username && (
+                    <button
+                      onClick={handleLogout}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline"
+                    >
+                      Cerrar sesión
+                    </button>
+                  )}
+                </div>
                 
                 {error && (
                   <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
                     {error}
+                  </div>
+                )}
+
+                {username && (
+                  <div className="mb-4 text-center text-sm text-gray-600">
+                    Usuario: <span className="font-semibold">{username}</span>
                   </div>
                 )}
                 
@@ -278,6 +350,50 @@
                 </div>
               </div>
 
+              {/* Modal de Login */}
+              {showLoginModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                  <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
+                    <h2 className="text-xl font-bold mb-4 text-gray-800">Iniciar Sesión</h2>
+                    
+                    <input
+                      type="text"
+                      placeholder="Usuario"
+                      value={inputUsername}
+                      onChange={(e) => setInputUsername(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:border-blue-500"
+                      autoFocus
+                    />
+                    
+                    {loginError && (
+                      <div className="mb-3 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+                        {loginError}
+                      </div>
+                    )}
+                    
+                    <button
+                      onClick={handleLogin}
+                      className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-2"
+                    >
+                      Entrar
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setShowLoginModal(false);
+                        setLoginError('');
+                        setInputUsername('');
+                      }}
+                      className="w-full py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal de Categorías */}
               {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                   <div className="bg-white rounded-lg shadow-xl p-6 max-w-xs w-full">
