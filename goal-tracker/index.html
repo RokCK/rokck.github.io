@@ -21,18 +21,31 @@
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpnb2hhd25md2JoeXV1Ymd6aGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2NjExNTQsImV4cCI6MjA4MzIzNzE1NH0.3AF50DVfjnXhlx_chrPFeVXtnhRvFPhreZFq30y1mSY';
         const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-        const DEFAULT_CATEGORIES = [
-          { name: 'Health', color: '#FF6B6B', colorOpaque: '#FFB0B0', id: 'health', hops: 50 },
-          { name: 'Posts', color: '#FDD835', colorOpaque: '#F3E79B', id: 'posts', hops: 50 },
-          { name: 'Books', color: '#26C6DA', colorOpaque: '#8DD9E5', id: 'books', hops: 50 },
-          { name: 'Courses', color: '#AB47BC', colorOpaque: '#C98DD1', id: 'courses', hops: 50 },
-          { name: 'Quests', color: '#FFA726', colorOpaque: '#FFCD85', id: 'quests', hops: 50 },
-          { name: 'Money', color: '#4CAF50', colorOpaque: '#90C695', id: 'money', hops: 50 }
+        // Colores LEGO por defecto para 4 categorías
+        const DEFAULT_LEGO_COLORS = [
+            { name: 'Travel', color: '#FF6B6B', colorOpaque: '#FFB0B0', id: 'travel', hops: 5 },
+            { name: 'Read', color: '#FDD835', colorOpaque: '#F3E79B', id: 'read', hops: 10 },
+            { name: 'Gym', color: '#26C6DA', colorOpaque: '#8DD9E5', id: 'gym', hops: 100 },
+            { name: 'Money', color: '#4CAF50', colorOpaque: '#90C695', id: 'money', hops: 500 }
+        ];
+
+        // Paleta de colores para hasta 10 categorías
+        const COLOR_PALETTE = [
+            { color: '#FF6B6B', colorOpaque: '#FFB0B0' }, // Rojo LEGO
+            { color: '#FDD835', colorOpaque: '#F3E79B' }, // Amarillo LEGO
+            { color: '#26C6DA', colorOpaque: '#8DD9E5' }, // Azul claro LEGO
+            { color: '#4CAF50', colorOpaque: '#90C695' }, // Verde LEGO
+            { color: '#AB47BC', colorOpaque: '#C98DD1' }, // Morado
+            { color: '#FFA726', colorOpaque: '#FFCD85' }, // Naranja
+            { color: '#7E57C2', colorOpaque: '#B39DDB' }, // Violeta
+            { color: '#26A69A', colorOpaque: '#80CBC4' }, // Verde azulado
+            { color: '#EC407A', colorOpaque: '#F48FB1' }, // Rosa
+            { color: '#5C6BC0', colorOpaque: '#9FA8DA' }  // Azul índigo
         ];
 
         const GoalTracker = () => {
           const [progress, setProgress] = useState({});
-          const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+          const [categories, setCategories] = useState(DEFAULT_LEGO_COLORS);
           const [showModal, setShowModal] = useState(false);
           const [showLoginModal, setShowLoginModal] = useState(false);
           const [showInfoModal, setShowInfoModal] = useState(false);
@@ -43,7 +56,7 @@
           const [inputUsername, setInputUsername] = useState('');
           const [loginError, setLoginError] = useState('');
           const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
-          const [tempCategories, setTempCategories] = useState([...DEFAULT_CATEGORIES]);
+          const [tempCategories, setTempCategories] = useState([...DEFAULT_LEGO_COLORS]);
 
           useEffect(() => {
             // Cargar usuario desde localStorage si existe
@@ -52,9 +65,15 @@
               setUsername(savedUsername);
               loadUserData(savedUsername);
             } else {
-              // Mostrar modal de login si no hay usuario guardado
+              // Usuario no logueado - mostrar vista por defecto
+              setProgress({
+                travel: 0,
+                read: 0,
+                gym: 0,
+                money: 0
+              });
+              setCategories(DEFAULT_LEGO_COLORS);
               setIsLoading(false);
-              setTimeout(() => setShowLoginModal(true), 300);
             }
           }, []);
 
@@ -119,15 +138,27 @@
               }
 
               if (!configData) {
-                // Primera vez del usuario - usar configuración por defecto
-                setIsFirstTimeSetup(true);
-                setTempCategories([...DEFAULT_CATEGORIES]);
-                setCategories(DEFAULT_CATEGORIES);
+                // Primera vez del usuario - crear categorías iniciales con 4 items
+                const initialCategories = [];
+                for (let i = 0; i < 4; i++) {
+                  initialCategories.push({
+                    name: `Goal ${i + 1}`,
+                    color: COLOR_PALETTE[i].color,
+                    colorOpaque: COLOR_PALETTE[i].colorOpaque,
+                    id: `goal_${i + 1}`,
+                    hops: 10
+                  });
+                }
+                
+                setTempCategories([...initialCategories]);
+                setCategories([...initialCategories]);
                 const initialProgress = {};
-                DEFAULT_CATEGORIES.forEach(cat => {
+                initialCategories.forEach(cat => {
                   initialProgress[cat.id] = 0;
                 });
                 setProgress(initialProgress);
+                
+                setIsFirstTimeSetup(true);
                 setIsLoading(false);
                 return;
               }
@@ -168,6 +199,34 @@
             }
           };
 
+          const addNewCategory = () => {
+            if (tempCategories.length >= 10) {
+              setError('Máximo 10 categorías permitidas');
+              return;
+            }
+            
+            const newIndex = tempCategories.length;
+            const newCategory = {
+              name: `Goal ${newIndex + 1}`,
+              color: COLOR_PALETTE[newIndex % COLOR_PALETTE.length].color,
+              colorOpaque: COLOR_PALETTE[newIndex % COLOR_PALETTE.length].colorOpaque,
+              id: `goal_${newIndex + 1}`,
+              hops: 10
+            };
+            
+            setTempCategories([...tempCategories, newCategory]);
+          };
+
+          const removeCategory = (index) => {
+            if (tempCategories.length <= 4) {
+              setError('Mínimo 4 categorías requeridas');
+              return;
+            }
+            
+            const updatedCategories = tempCategories.filter((_, i) => i !== index);
+            setTempCategories(updatedCategories);
+          };
+
           const saveConfig = async () => {
             try {
               // Validar que todos los campos estén llenos
@@ -180,6 +239,12 @@
                   setError('Los hops deben ser mayores a 0');
                   return;
                 }
+              }
+
+              // Validar que haya al menos 4 categorías
+              if (tempCategories.length < 4) {
+                setError('Se requieren al menos 4 categorías');
+                return;
               }
 
               // Guardar configuración en 'user_config'
@@ -251,17 +316,21 @@
           const handleLogout = () => {
             localStorage.removeItem('goal_tracker_user');
             setUsername('');
-            setProgress({});
-            setCategories(DEFAULT_CATEGORIES);
+            setProgress({
+              travel: 0,
+              read: 0,
+              gym: 0,
+              money: 0
+            });
+            setCategories(DEFAULT_LEGO_COLORS);
             setShowInfoModal(false);
-            setShowLoginModal(true);
+            setShowLoginModal(false);
           };
 
           const handleAddClick = () => {
             if (!username) {
               setShowLoginModal(true);
             } else if (isFirstTimeSetup) {
-              setTempCategories([...DEFAULT_CATEGORIES]);
               setShowConfigModal(true);
             } else {
               setShowModal(true);
@@ -340,14 +409,14 @@
                 
                 <text
                   x="200"
-                  y="210"
+                  y="205"
                   textAnchor="middle"
-                  fontSize="24"
+                  fontSize="40"
                   fontWeight="600"
                   fill="#666"
                   className="pointer-events-none select-none"
                 >
-                  ADD
+                  +
                 </text>
               </svg>
             );
@@ -486,10 +555,11 @@
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
                   <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full my-8">
                     <h2 className="text-xl font-bold mb-4 text-gray-800">Configura tus Metas</h2>
+                    <p className="text-sm text-gray-600 mb-2">Categorías: {tempCategories.length}/10 (Mínimo: 4)</p>
                     
                     <div className="space-y-4 mb-6">
                       {tempCategories.map((cat, index) => (
-                        <div key={cat.id} className="border border-gray-300 rounded-lg p-3">
+                        <div key={cat.id} className="border border-gray-300 rounded-lg p-3 relative">
                           <div className="flex items-center gap-2 mb-2">
                             <div
                               className="w-6 h-6 rounded"
@@ -502,6 +572,15 @@
                               className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
                               placeholder="Nombre"
                             />
+                            {tempCategories.length > 4 && (
+                              <button
+                                onClick={() => removeCategory(index)}
+                                className="w-8 h-8 flex items-center justify-center text-red-500 hover:text-red-700"
+                                title="Eliminar categoría"
+                              >
+                                ×
+                              </button>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <label className="text-sm text-gray-600 w-12">Hops:</label>
@@ -517,12 +596,49 @@
                       ))}
                     </div>
                     
-                    <button
-                      onClick={saveConfig}
-                      className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      Guardar Configuración
-                    </button>
+                    {tempCategories.length < 10 && (
+                      <button
+                        onClick={addNewCategory}
+                        className="w-full py-2 mb-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <span className="text-lg">+</span> Agregar nueva categoría
+                      </button>
+                    )}
+                    
+                    <div className="flex gap-3">
+                      <button
+                        onClick={saveConfig}
+                        className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Guardar
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (tempCategories.length < 4) {
+                            // Si hay menos de 4 categorías, restaurar a 4
+                            const newCategories = [];
+                            for (let i = 0; i < 4; i++) {
+                              if (i < tempCategories.length) {
+                                newCategories.push({...tempCategories[i]});
+                              } else {
+                                newCategories.push({
+                                  name: `Goal ${i + 1}`,
+                                  color: COLOR_PALETTE[i].color,
+                                  colorOpaque: COLOR_PALETTE[i].colorOpaque,
+                                  id: `goal_${i + 1}`,
+                                  hops: 10
+                                });
+                              }
+                            }
+                            setTempCategories(newCategories);
+                          }
+                          setShowConfigModal(false);
+                        }}
+                        className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -531,7 +647,7 @@
               {showInfoModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                   <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
-                    <h2 className="text-xl font-bold mb-2 text-gray-800 text-center">Simple Goal Tracker</h2>
+                    <h2 className="text-xl font-bold mb-2 text-gray-800 text-center">Goal Tracker</h2>
                     <p className="text-sm text-gray-600 text-center mb-4">Usuario: {username}</p>
                     <p className="text-sm text-gray-600 text-center mb-6">Developed by Carlos Galindo</p>
                     
@@ -568,6 +684,7 @@
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                   <div className="bg-white rounded-lg shadow-xl p-6 max-w-xs w-full">
                     <div className="flex flex-col gap-3">
+                      {/* Primera fila */}
                       <div className="flex gap-3 justify-center">
                         {categories.slice(0, 2).map((cat) => (
                           <button
@@ -581,6 +698,7 @@
                         ))}
                       </div>
                       
+                      {/* Segunda fila */}
                       <div className="flex gap-3 justify-center">
                         {categories.slice(2, 4).map((cat) => (
                           <button
@@ -594,18 +712,53 @@
                         ))}
                       </div>
                       
-                      <div className="flex gap-3 justify-center">
-                        {categories.slice(4, 6).map((cat) => (
-                          <button
-                            key={cat.id}
-                            onClick={() => handleCategorySelect(cat.id)}
-                            className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center text-center px-2"
-                            style={{ backgroundColor: cat.color }}
-                          >
-                            {cat.name}
-                          </button>
-                        ))}
-                      </div>
+                      {/* Filas adicionales si hay más de 4 categorías */}
+                      {categories.length > 4 && (
+                        <div className="flex gap-3 justify-center">
+                          {categories.slice(4, 6).map((cat) => (
+                            <button
+                              key={cat.id}
+                              onClick={() => handleCategorySelect(cat.id)}
+                              className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center text-center px-2"
+                              style={{ backgroundColor: cat.color }}
+                            >
+                              {cat.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Más filas si hay más de 6 categorías */}
+                      {categories.length > 6 && (
+                        <div className="flex gap-3 justify-center">
+                          {categories.slice(6, 8).map((cat) => (
+                            <button
+                              key={cat.id}
+                              onClick={() => handleCategorySelect(cat.id)}
+                              className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center text-center px-2"
+                              style={{ backgroundColor: cat.color }}
+                            >
+                              {cat.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Última fila para 9-10 categorías */}
+                      {categories.length > 8 && (
+                        <div className="flex gap-3 justify-center">
+                          {categories.slice(8, 10).map((cat) => (
+                            <button
+                              key={cat.id}
+                              onClick={() => handleCategorySelect(cat.id)}
+                              className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center text-center px-2"
+                              style={{ backgroundColor: cat.color }}
+                            >
+                              {cat.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     
                     <button
