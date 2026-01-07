@@ -8,7 +8,6 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Incluir Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -16,185 +15,225 @@
 
     <script type="text/babel">
         const { useState, useEffect } = React;
+        const { createClient } = supabase;
+
+        const supabaseUrl = 'https://zgohawnfwbhyuubgzhit.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpnb2hhd25md2JoeXV1Ymd6aGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2NjExNTQsImV4cCI6MjA4MzIzNzE1NH0.3AF50DVfjnXhlx_chrPFeVXtnhRvFPhreZFq30y1mSY';
+        const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+        const DEFAULT_CATEGORIES = [
+          { name: 'Health', color: '#FF6B6B', colorOpaque: '#FFB0B0', id: 'health', hops: 50 },
+          { name: 'Posts', color: '#FDD835', colorOpaque: '#F3E79B', id: 'posts', hops: 50 },
+          { name: 'Books', color: '#26C6DA', colorOpaque: '#8DD9E5', id: 'books', hops: 50 },
+          { name: 'Learning', color: '#AB47BC', colorOpaque: '#C98DD1', id: 'learning', hops: 50 },
+          { name: 'Quests', color: '#FFA726', colorOpaque: '#FFCD85', id: 'quests', hops: 50 },
+          { name: 'Money', color: '#4CAF50', colorOpaque: '#90C695', id: 'money', hops: 50 }
+        ];
 
         const GoalTracker = () => {
-          const [progress, setProgress] = useState({
-            health: 0,
-            posts: 0,
-            books: 0,
-            learning: 0,
-            quests: 0,
-            money: 0
-          });
-
+          const [progress, setProgress] = useState({});
+          const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
           const [showModal, setShowModal] = useState(false);
+          const [showLoginModal, setShowLoginModal] = useState(false);
+          const [showInfoModal, setShowInfoModal] = useState(false);
+          const [showConfigModal, setShowConfigModal] = useState(false);
           const [isLoading, setIsLoading] = useState(true);
           const [error, setError] = useState(null);
-
-          // Configuración de Supabase
-          const SUPABASE_URL = 'https://zgohawnfwbhyuubgzhit.supabase.co';
-          const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpnb2hhd25md2JoeXV1Ymd6aGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2NjExNTQsImV4cCI6MjA4MzIzNzE1NH0.3AF50DVfjnXhlx_chrPFeVXtnhRvFPhreZFq30y1mSY';
-          const USER_ID = 'default_user';
-
-          // Crear cliente Supabase
-          const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-          const categories = [
-            { name: 'Health', color: '#FF6B6B', colorOpaque: '#FFB0B0', id: 'health' },
-            { name: 'Posts', color: '#FDD835', colorOpaque: '#F3E79B', id: 'posts' },
-            { name: 'Books', color: '#26C6DA', colorOpaque: '#8DD9E5', id: 'books' },
-            { name: 'Learning', color: '#AB47BC', colorOpaque: '#C98DD1', id: 'learning' },
-            { name: 'Quests', color: '#FFA726', colorOpaque: '#FFCD85', id: 'quests' },
-            { name: 'Money', color: '#4CAF50', colorOpaque: '#90C695', id: 'money' }
-          ];
+          const [username, setUsername] = useState('');
+          const [inputUsername, setInputUsername] = useState('');
+          const [loginError, setLoginError] = useState('');
+          const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
+          const [tempCategories, setTempCategories] = useState([...DEFAULT_CATEGORIES]);
 
           useEffect(() => {
-            loadProgress();
+            const savedUsername = localStorage.getItem('goal_tracker_user');
+            if (savedUsername) {
+              setUsername(savedUsername);
+              loadUserData(savedUsername);
+            } else {
+              setIsLoading(false);
+            }
           }, []);
 
-          const loadProgress = async () => {
+          const handleLogin = async () => {
+            const user = inputUsername.trim().toLowerCase();
+            
+            if (!user) {
+              setLoginError('Por favor ingresa un usuario');
+              return;
+            }
+
+            if (user !== 'rokck') {
+              setLoginError('Usuario no autorizado');
+              return;
+            }
+
+            localStorage.setItem('goal_tracker_user', user);
+            setUsername(user);
+            setShowLoginModal(false);
+            setLoginError('');
+            
+            await loadUserData(user);
+          };
+
+          const loadUserData = async (user) => {
             try {
-              console.log('Cargando progreso desde Supabase...');
+              setIsLoading(true);
               
-              // Obtener los datos del usuario 'default_user' de la tabla 'progress'
-              const { data, error: supabaseError } = await supabase
-                .from('progress')
+              // Buscar configuración del usuario
+              const { data: configData, error: configError } = await supabaseClient
+                .from('user_config')
                 .select('*')
-                .eq('user_id', USER_ID)
-                .order('created_at', { ascending: false })
-                .limit(1)
+                .eq('user_id', user)
                 .single();
 
-              if (supabaseError) {
-                // Si no hay datos, crear un registro inicial
-                if (supabaseError.code === 'PGRST116') {
-                  console.log('No se encontraron datos, creando registro inicial...');
-                  await createInitialProgress();
-                  return;
-                }
-                throw supabaseError;
+              if (configError && configError.code !== 'PGRST116') {
+                throw configError;
               }
 
-              console.log('Datos cargados:', data);
-              
-              // Mapear los datos de Supabase al estado local
-              if (data) {
-                setProgress({
-                  health: data.health || 0,
-                  posts: data.posts || 0,
-                  books: data.books || 0,
-                  learning: data.learning || 0,
-                  quests: data.quests || 0,
-                  money: data.money || 0
-                });
+              if (!configData) {
+                // Primera vez del usuario - mostrar configuración
+                setIsFirstTimeSetup(true);
+                setTempCategories([...DEFAULT_CATEGORIES]);
+                setShowConfigModal(true);
+                setIsLoading(false);
+                return;
               }
-              
+
+              // Cargar categorías personalizadas
+              const userCategories = JSON.parse(configData.categories);
+              setCategories(userCategories);
+
+              // Cargar progreso
+              const { data: progressData, error: progressError } = await supabaseClient
+                .from('progress')
+                .select('*')
+                .eq('user_id', user)
+                .single();
+
+              if (progressError && progressError.code !== 'PGRST116') {
+                throw progressError;
+              }
+
+              if (progressData) {
+                const userProgress = JSON.parse(progressData.progress_data);
+                setProgress(userProgress);
+              } else {
+                // Crear progreso inicial
+                const initialProgress = {};
+                userCategories.forEach(cat => {
+                  initialProgress[cat.id] = 0;
+                });
+                setProgress(initialProgress);
+              }
+
               setError(null);
             } catch (err) {
-              console.error('Error al cargar:', err);
+              console.error('Error:', err);
               setError('Error al cargar datos: ' + err.message);
             } finally {
               setIsLoading(false);
             }
           };
 
-          const createInitialProgress = async () => {
+          const saveConfig = async () => {
             try {
-              const initialData = {
-                user_id: USER_ID,
-                health: 0,
-                posts: 0,
-                books: 0,
-                learning: 0,
-                quests: 0,
-                money: 0
-              };
+              // Validar que todos los campos estén llenos
+              for (const cat of tempCategories) {
+                if (!cat.name.trim()) {
+                  setError('Todos los nombres son requeridos');
+                  return;
+                }
+                if (!cat.hops || cat.hops < 1) {
+                  setError('Los hops deben ser mayores a 0');
+                  return;
+                }
+              }
 
-              const { data, error } = await supabase
-                .from('progress')
-                .insert([initialData])
-                .select()
-                .single();
+              // Guardar configuración
+              const { error: configError } = await supabaseClient
+                .from('user_config')
+                .upsert({
+                  user_id: username,
+                  categories: JSON.stringify(tempCategories)
+                });
 
-              if (error) throw error;
+              if (configError) throw configError;
 
-              console.log('Registro inicial creado:', data);
-              setProgress({
-                health: 0,
-                posts: 0,
-                books: 0,
-                learning: 0,
-                quests: 0,
-                money: 0
+              // Inicializar progreso
+              const initialProgress = {};
+              tempCategories.forEach(cat => {
+                initialProgress[cat.id] = 0;
               });
+
+              const { error: progressError } = await supabaseClient
+                .from('progress')
+                .upsert({
+                  user_id: username,
+                  progress_data: JSON.stringify(initialProgress)
+                });
+
+              if (progressError) throw progressError;
+
+              setCategories(tempCategories);
+              setProgress(initialProgress);
+              setShowConfigModal(false);
+              setIsFirstTimeSetup(false);
               setError(null);
             } catch (err) {
-              console.error('Error al crear registro inicial:', err);
-              setError('Error al crear datos iniciales: ' + err.message);
-            } finally {
-              setIsLoading(false);
+              console.error('Error al guardar configuración:', err);
+              setError('Error al guardar: ' + err.message);
             }
+          };
+
+          const updateTempCategory = (index, field, value) => {
+            const updated = [...tempCategories];
+            if (field === 'hops') {
+              updated[index][field] = parseInt(value) || 0;
+            } else {
+              updated[index][field] = value;
+            }
+            setTempCategories(updated);
           };
 
           const saveProgress = async (newProgress) => {
             try {
-              console.log('Guardando en Supabase:', newProgress);
-              
-              // Buscar el registro existente del usuario
-              const { data: existingData, error: fetchError } = await supabase
+              const { error } = await supabaseClient
                 .from('progress')
-                .select('id')
-                .eq('user_id', USER_ID)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
+                .upsert({
+                  user_id: username,
+                  progress_data: JSON.stringify(newProgress)
+                });
 
-              if (fetchError && fetchError.code !== 'PGRST116') {
-                throw fetchError;
-              }
-
-              const updateData = {
-                user_id: USER_ID,
-                health: newProgress.health,
-                posts: newProgress.posts,
-                books: newProgress.books,
-                learning: newProgress.learning,
-                quests: newProgress.quests,
-                money: newProgress.money,
-                updated_at: new Date().toISOString()
-              };
-
-              let result;
-              
-              if (existingData && existingData.id) {
-                // Actualizar registro existente
-                result = await supabase
-                  .from('progress')
-                  .update(updateData)
-                  .eq('id', existingData.id)
-                  .select()
-                  .single();
-              } else {
-                // Crear nuevo registro
-                result = await supabase
-                  .from('progress')
-                  .insert([updateData])
-                  .select()
-                  .single();
-              }
-
-              if (result.error) throw result.error;
-              
-              console.log('Datos guardados exitosamente:', result.data);
+              if (error) throw error;
               setError(null);
             } catch (err) {
               console.error('Error al guardar:', err);
-              setError('Error al guardar datos: ' + err.message);
+              setError('Error al guardar: ' + err.message);
+            }
+          };
+
+          const handleLogout = () => {
+            localStorage.removeItem('goal_tracker_user');
+            setUsername('');
+            setProgress({});
+            setCategories(DEFAULT_CATEGORIES);
+            setShowInfoModal(false);
+          };
+
+          const handleAddClick = () => {
+            if (!username) {
+              setShowLoginModal(true);
+            } else if (isFirstTimeSetup) {
+              setError('Por favor configura tus metas primero');
+            } else {
+              setShowModal(true);
             }
           };
 
           const handleCategorySelect = (categoryId) => {
-            if (progress[categoryId] < 50) {
+            const category = categories.find(c => c.id === categoryId);
+            if (progress[categoryId] < category.hops) {
               const newProgress = {
                 ...progress,
                 [categoryId]: progress[categoryId] + 1
@@ -228,7 +267,7 @@
               <svg width="400" height="400" viewBox="0 0 400 400" className="max-w-full h-auto">
                 {categories.map((cat, idx) => {
                   const angle = startAngle + anglePerSegment * idx;
-                  const progressAngle = (progress[cat.id] / 50) * anglePerSegment;
+                  const progressAngle = (progress[cat.id] / cat.hops) * anglePerSegment;
                   
                   return (
                     <g key={cat.id}>
@@ -259,7 +298,7 @@
                   stroke="#E0E0E0"
                   strokeWidth="2"
                   className="cursor-pointer hover:fill-gray-50 transition-colors"
-                  onClick={() => setShowModal(true)}
+                  onClick={handleAddClick}
                 />
                 
                 <text
@@ -277,6 +316,12 @@
             );
           };
 
+          const getTotalProgress = () => {
+            const total = categories.reduce((sum, cat) => sum + cat.hops, 0);
+            const current = categories.reduce((sum, cat) => sum + (progress[cat.id] || 0), 0);
+            return total > 0 ? Math.round((current / total) * 100) : 0;
+          };
+
           if (isLoading) {
             return (
               <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -287,7 +332,7 @@
 
           return (
             <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-              <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+              <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full relative">
                 <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">
                   Goal Tracker
                 </h1>
@@ -312,12 +357,12 @@
                         className="h-full rounded-full transition-all duration-300"
                         style={{
                           backgroundColor: '#2196F3',
-                          width: `${(Object.values(progress).reduce((a, b) => a + b, 0) / 300) * 100}%`
+                          width: `${getTotalProgress()}%`
                         }}
                       />
                     </div>
                     <span className="text-sm font-bold text-blue-600 w-12 text-right">
-                      {Math.round((Object.values(progress).reduce((a, b) => a + b, 0) / 300) * 100)}%
+                      {getTotalProgress()}%
                     </span>
                   </div>
                   
@@ -331,18 +376,156 @@
                           className="h-full rounded-full transition-all duration-300"
                           style={{
                             backgroundColor: cat.color,
-                            width: `${(progress[cat.id] / 50) * 100}%`
+                            width: `${((progress[cat.id] || 0) / cat.hops) * 100}%`
                           }}
                         />
                       </div>
                       <span className="text-sm font-medium text-gray-600 w-12 text-right">
-                        {(progress[cat.id] * 2)}%
+                        {Math.round(((progress[cat.id] || 0) / cat.hops) * 100)}%
                       </span>
                     </div>
                   ))}
                 </div>
+
+                {username && (
+                  <div
+                    onClick={() => setShowInfoModal(true)}
+                    className="absolute bottom-0 right-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderLeft: '30px solid transparent',
+                      borderBottom: '30px solid #EF4444'
+                    }}
+                  />
+                )}
               </div>
 
+              {/* Modal de Login */}
+              {showLoginModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                  <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
+                    <h2 className="text-xl font-bold mb-4 text-gray-800">Iniciar Sesión</h2>
+                    
+                    <input
+                      type="text"
+                      placeholder="Usuario"
+                      value={inputUsername}
+                      onChange={(e) => setInputUsername(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:border-blue-500"
+                      autoFocus
+                    />
+                    
+                    {loginError && (
+                      <div className="mb-3 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+                        {loginError}
+                      </div>
+                    )}
+                    
+                    <button
+                      onClick={handleLogin}
+                      className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-2"
+                    >
+                      Entrar
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setShowLoginModal(false);
+                        setLoginError('');
+                        setInputUsername('');
+                      }}
+                      className="w-full py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal de Configuración */}
+              {showConfigModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+                  <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full my-8">
+                    <h2 className="text-xl font-bold mb-4 text-gray-800">Configura tus Metas</h2>
+                    
+                    <div className="space-y-4 mb-6">
+                      {tempCategories.map((cat, index) => (
+                        <div key={cat.id} className="border border-gray-300 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div
+                              className="w-6 h-6 rounded"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            <input
+                              type="text"
+                              value={cat.name}
+                              onChange={(e) => updateTempCategory(index, 'name', e.target.value)}
+                              className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                              placeholder="Nombre"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm text-gray-600 w-12">Hops:</label>
+                            <input
+                              type="number"
+                              value={cat.hops}
+                              onChange={(e) => updateTempCategory(index, 'hops', e.target.value)}
+                              className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                              min="1"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <button
+                      onClick={saveConfig}
+                      className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Guardar Configuración
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal de Información */}
+              {showInfoModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                  <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
+                    <h2 className="text-xl font-bold mb-2 text-gray-800 text-center">Simple Goal Tracker</h2>
+                    <p className="text-sm text-gray-600 text-center mb-6">Developed by Carlos Galindo</p>
+                    
+                    <button
+                      onClick={() => {
+                        setTempCategories([...categories]);
+                        setShowInfoModal(false);
+                        setShowConfigModal(true);
+                      }}
+                      className="w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors mb-2"
+                    >
+                      Reconfigurar Metas
+                    </button>
+
+                    <button
+                      onClick={handleLogout}
+                      className="w-full py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors mb-2"
+                    >
+                      Cerrar Sesión
+                    </button>
+                    
+                    <button
+                      onClick={() => setShowInfoModal(false)}
+                      className="w-full py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal de Categorías */}
               {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                   <div className="bg-white rounded-lg shadow-xl p-6 max-w-xs w-full">
@@ -352,7 +535,7 @@
                           <button
                             key={cat.id}
                             onClick={() => handleCategorySelect(cat.id)}
-                            className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center"
+                            className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center text-center px-2"
                             style={{ backgroundColor: cat.color }}
                           >
                             {cat.name}
@@ -365,7 +548,7 @@
                           <button
                             key={cat.id}
                             onClick={() => handleCategorySelect(cat.id)}
-                            className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center"
+                            className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center text-center px-2"
                             style={{ backgroundColor: cat.color }}
                           >
                             {cat.name}
@@ -378,7 +561,7 @@
                           <button
                             key={cat.id}
                             onClick={() => handleCategorySelect(cat.id)}
-                            className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center"
+                            className="w-24 h-24 rounded-2xl font-semibold text-white transition-transform hover:scale-105 active:scale-95 flex items-center justify-center text-center px-2"
                             style={{ backgroundColor: cat.color }}
                           >
                             {cat.name}
