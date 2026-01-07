@@ -129,6 +129,7 @@
           const [showCatAnimation, setShowCatAnimation] = useState(false);
           const [showFireworks, setShowFireworks] = useState(false);
           const [completedCategory, setCompletedCategory] = useState(null);
+          const [showResetModal, setShowResetModal] = useState(false);
           const [isLoading, setIsLoading] = useState(true);
           const [error, setError] = useState(null);
           const [username, setUsername] = useState('');
@@ -137,6 +138,7 @@
           const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
           const [tempCategories, setTempCategories] = useState([...DEFAULT_LEGO_COLORS]);
           const [recentlyCompleted, setRecentlyCompleted] = useState([]);
+          const [isOverallCompleted, setIsOverallCompleted] = useState(false);
 
           const catAnimationRef = useRef(null);
           const fireworksRef = useRef(null);
@@ -168,12 +170,12 @@
           const checkForCompletions = () => {
             if (!username || Object.keys(progress).length === 0) return;
 
-            let totalCompleted = false;
-            
             // Verificar si se completó el 100% overall
             const totalProgress = getTotalProgress();
-            if (totalProgress === 100 && !showFireworks) {
-              totalCompleted = true;
+            const overallCompleted = totalProgress === 100;
+            setIsOverallCompleted(overallCompleted);
+            
+            if (overallCompleted && !showFireworks) {
               triggerFireworks();
             }
             
@@ -182,7 +184,7 @@
               const currentProgress = progress[cat.id] || 0;
               const isCompleted = currentProgress >= cat.hops;
               
-              if (isCompleted && !recentlyCompleted.includes(cat.id) && !totalCompleted) {
+              if (isCompleted && !recentlyCompleted.includes(cat.id) && !overallCompleted) {
                 // Si es una categoría recién completada (y no es el overall completo)
                 setCompletedCategory(cat);
                 setShowCatAnimation(true);
@@ -348,6 +350,12 @@
               if (progressData) {
                 const userProgress = JSON.parse(progressData.progress_data);
                 setProgress(userProgress);
+                
+                // Verificar si ya estaba completado el overall
+                const total = userCategories.reduce((sum, cat) => sum + cat.hops, 0);
+                const current = userCategories.reduce((sum, cat) => sum + (userProgress[cat.id] || 0), 0);
+                const overallCompleted = total > 0 ? Math.round((current / total) * 100) === 100 : false;
+                setIsOverallCompleted(overallCompleted);
               } else {
                 // Crear progreso inicial
                 const initialProgress = {};
@@ -414,57 +422,76 @@
                 return;
               }
 
-              // Guardar configuración en 'user_config'
-              const { error: configError } = await supabaseClient
+              // Primero verificar si ya existe configuración para este usuario
+              const { data: existingConfig } = await supabaseClient
                 .from('user_config')
-                .upsert({
-                  user_id: username,
-                  categories: JSON.stringify(tempCategories),
-                  updated_at: new Date().toISOString()
-                });
-
-              if (configError) throw configError;
-
-              // Crear o actualizar progreso en 'progress'
-              // Primero verificar si ya existe un registro de progreso
-              const { data: existingProgress } = await supabaseClient
-                .from('progress')
-                .select('*')
+                .select('id')
                 .eq('user_id', username)
                 .single();
 
-              let initialProgress;
-              if (existingProgress) {
-                // Mantener el progreso existente, pero ajustar para nuevas categorías
-                const existingProgressData = JSON.parse(existingProgress.progress_data);
-                initialProgress = {};
-                tempCategories.forEach(cat => {
-                  // Mantener el progreso si la categoría ya existía, sino 0
-                  initialProgress[cat.id] = existingProgressData[cat.id] || 0;
-                });
+              let configResult;
+              if (existingConfig) {
+                // Actualizar configuración existente
+                configResult = await supabaseClient
+                  .from('user_config')
+                  .update({
+                    categories: JSON.stringify(tempCategories),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('user_id', username);
               } else {
-                // Crear progreso inicial
-                initialProgress = {};
-                tempCategories.forEach(cat => {
-                  initialProgress[cat.id] = 0;
-                });
+                // Crear nueva configuración
+                configResult = await supabaseClient
+                  .from('user_config')
+                  .insert({
+                    user_id: username,
+                    categories: JSON.stringify(tempCategories)
+                  });
               }
 
-              // Guardar progreso
-              const { error: progressError } = await supabaseClient
-                .from('progress')
-                .upsert({
-                  user_id: username,
-                  progress_data: JSON.stringify(initialProgress),
-                  updated_at: new Date().toISOString()
-                });
+              if (configResult.error) throw configResult.error;
 
-              if (progressError) throw progressError;
+              // Crear o actualizar progreso en 'progress' (siempre poner en 0)
+              const newProgress = {};
+              tempCategories.forEach(cat => {
+                newProgress[cat.id] = 0;
+              });
+
+              // Verificar si ya existe progreso para este usuario
+              const { data: existingProgress } = await supabaseClient
+                .from('progress')
+                .select('id')
+                .eq('user_id', username)
+                .single();
+
+              let progressResult;
+              if (existingProgress) {
+                // Actualizar progreso existente (resetear a 0)
+                progressResult = await supabaseClient
+                  .from('progress')
+                  .update({
+                    progress_data: JSON.stringify(newProgress),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('user_id', username);
+              } else {
+                // Crear nuevo progreso
+                progressResult = await supabaseClient
+                  .from('progress')
+                  .insert({
+                    user_id: username,
+                    progress_data: JSON.stringify(newProgress)
+                  });
+              }
+
+              if (progressResult.error) throw progressResult.error;
 
               setCategories(tempCategories);
-              setProgress(initialProgress);
+              setProgress(newProgress);
               setShowConfigModal(false);
               setIsFirstTimeSetup(false);
+              setIsOverallCompleted(false);
+              setRecentlyCompleted([]);
               setError(null);
             } catch (err) {
               console.error('Error al guardar configuración:', err);
@@ -540,7 +567,9 @@
             setShowLoginModal(false);
             setShowCatAnimation(false);
             setShowFireworks(false);
+            setShowResetModal(false);
             setRecentlyCompleted([]);
+            setIsOverallCompleted(false);
             // NO resetear isFirstTimeSetup ya que es específico del usuario
           };
 
@@ -549,9 +578,25 @@
               setShowLoginModal(true);
             } else if (isFirstTimeSetup) {
               setShowConfigModal(true);
+            } else if (isOverallCompleted) {
+              // Si el overall está completado, mostrar modal para reiniciar
+              setShowResetModal(true);
             } else {
               setShowModal(true);
             }
+          };
+
+          const handleResetGoals = () => {
+            // Preparar las categorías actuales para reconfiguración
+            setTempCategories([...categories]);
+            setShowResetModal(false);
+            setShowConfigModal(true);
+          };
+
+          const handleContinueCurrent = () => {
+            // Solo cerrar el modal y continuar con las metas actuales
+            setShowResetModal(false);
+            setShowModal(true);
           };
 
           const handleCategorySelect = (categoryId) => {
@@ -638,6 +683,30 @@
                 >
                   +
                 </text>
+                
+                {/* Indicador de completado en el centro */}
+                {isOverallCompleted && (
+                  <g>
+                    <circle
+                      cx="200"
+                      cy="200"
+                      r="65"
+                      fill="gold"
+                      fillOpacity="0.2"
+                      className="completed-glow"
+                    />
+                    <text
+                      x="200"
+                      y="210"
+                      textAnchor="middle"
+                      fontSize="16"
+                      fontWeight="bold"
+                      fill="#D4AF37"
+                    >
+                      100% 🎉
+                    </text>
+                  </g>
+                )}
               </svg>
             );
           };
@@ -714,6 +783,9 @@
                       ¡Completaste el 100% de todas tus metas! 
                       Eres increíble. ¡Sigue así!
                     </p>
+                    <div className="text-sm text-white mb-6">
+                      Ahora puedes reiniciar tus metas para un nuevo ciclo
+                    </div>
                     <button
                       onClick={() => setShowFireworks(false)}
                       className="bg-white text-purple-600 font-bold py-3 px-8 rounded-full hover:bg-gray-100 transition-colors shadow-lg"
@@ -727,6 +799,53 @@
                   <div className="absolute -top-4 -right-4 text-4xl">⭐</div>
                   <div className="absolute -bottom-4 -left-4 text-4xl">🌟</div>
                   <div className="absolute -bottom-4 -right-4 text-4xl">🌟</div>
+                </div>
+              </div>
+            );
+          };
+
+          const renderResetModal = () => {
+            return (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
+                  <h2 className="text-xl font-bold mb-4 text-gray-800 text-center">🎊 ¡Felicidades! 🎊</h2>
+                  
+                  <div className="text-center mb-6">
+                    <div className="text-4xl mb-4">🏆</div>
+                    <p className="text-gray-700 mb-4">
+                      ¡Has completado el 100% de todas tus metas!
+                    </p>
+                    <p className="text-gray-600 text-sm mb-6">
+                      ¿Qué te gustaría hacer ahora?
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={handleResetGoals}
+                    className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity mb-3 font-semibold"
+                  >
+                    🆕 Establecer nuevas metas
+                    <div className="text-xs mt-1 opacity-80">
+                      (Reiniciar contadores a 0)
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={handleContinueCurrent}
+                    className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-opacity mb-3 font-semibold"
+                  >
+                    📊 Continuar con metas actuales
+                    <div className="text-xs mt-1 opacity-80">
+                      (Mantener progreso actual)
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => setShowResetModal(false)}
+                    className="w-full py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
                 </div>
               </div>
             );
@@ -747,6 +866,9 @@
               
               {/* Animación del gatito (solo se activa cuando showCatAnimation es true) */}
               {showCatAnimation && renderDancingCat()}
+              
+              {/* Modal para reiniciar metas cuando overall está completado */}
+              {showResetModal && renderResetModal()}
               
               <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full relative">
                 <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">
@@ -874,8 +996,19 @@
               {showConfigModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
                   <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full my-8">
-                    <h2 className="text-xl font-bold mb-4 text-gray-800">Configura tus Metas</h2>
+                    <h2 className="text-xl font-bold mb-4 text-gray-800">
+                      {isOverallCompleted ? '🎉 ¡Nuevas Metas! 🎉' : 'Configura tus Metas'}
+                    </h2>
                     <p className="text-sm text-gray-600 mb-2">Categorías: {tempCategories.length}/10 (Mínimo: 4)</p>
+                    
+                    {isOverallCompleted && (
+                      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800">
+                          <span className="font-bold">¡Felicidades por completar tu ciclo anterior!</span><br/>
+                          Configura tus nuevas metas para comenzar un nuevo ciclo. Todos los contadores se reiniciarán a 0.
+                        </p>
+                      </div>
+                    )}
                     
                     <div className="space-y-4 mb-6">
                       {tempCategories.map((cat, index) => (
@@ -930,7 +1063,7 @@
                         onClick={saveConfig}
                         className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                       >
-                        Guardar
+                        {isOverallCompleted ? 'Comenzar Nuevo Ciclo' : 'Guardar'}
                       </button>
                       <button
                         onClick={() => {
