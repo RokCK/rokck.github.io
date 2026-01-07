@@ -92,10 +92,15 @@
               }
 
               if (!configData) {
-                // Primera vez del usuario - mostrar configuración
+                // Primera vez del usuario - usar configuración por defecto
                 setIsFirstTimeSetup(true);
                 setTempCategories([...DEFAULT_CATEGORIES]);
-                setShowConfigModal(true);
+                setCategories(DEFAULT_CATEGORIES);
+                const initialProgress = {};
+                DEFAULT_CATEGORIES.forEach(cat => {
+                  initialProgress[cat.id] = 0;
+                });
+                setProgress(initialProgress);
                 setIsLoading(false);
                 return;
               }
@@ -222,14 +227,15 @@
           };
 
           const handleAddClick = () => {
-            if (!username) {
-              setShowLoginModal(true);
-            } else if (isFirstTimeSetup) {
-              setError('Por favor configura tus metas primero');
-            } else {
-              setShowModal(true);
-            }
-          };
+          if (!username) {
+            setShowLoginModal(true);
+          } else if (isFirstTimeSetup) {
+            setTempCategories([...DEFAULT_CATEGORIES]);
+            setShowConfigModal(true);
+          } else {
+            setShowModal(true);
+          }
+        };
 
           const handleCategorySelect = (categoryId) => {
             const category = categories.find(c => c.id === categoryId);
