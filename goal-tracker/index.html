@@ -258,12 +258,32 @@
 
               if (configError) throw configError;
 
-              // Inicializar progreso en 'progress'
-              const initialProgress = {};
-              tempCategories.forEach(cat => {
-                initialProgress[cat.id] = 0;
-              });
+              // Crear o actualizar progreso en 'progress'
+              // Primero verificar si ya existe un registro de progreso
+              const { data: existingProgress } = await supabaseClient
+                .from('progress')
+                .select('*')
+                .eq('user_id', username)
+                .single();
 
+              let initialProgress;
+              if (existingProgress) {
+                // Mantener el progreso existente, pero ajustar para nuevas categorías
+                const existingProgressData = JSON.parse(existingProgress.progress_data);
+                initialProgress = {};
+                tempCategories.forEach(cat => {
+                  // Mantener el progreso si la categoría ya existía, sino 0
+                  initialProgress[cat.id] = existingProgressData[cat.id] || 0;
+                });
+              } else {
+                // Crear progreso inicial
+                initialProgress = {};
+                tempCategories.forEach(cat => {
+                  initialProgress[cat.id] = 0;
+                });
+              }
+
+              // Guardar progreso
               const { error: progressError } = await supabaseClient
                 .from('progress')
                 .upsert({
@@ -297,15 +317,38 @@
 
           const saveProgress = async (newProgress) => {
             try {
-              const { error } = await supabaseClient
+              // Primero verificar si ya existe un registro
+              const { data: existingProgress, error: fetchError } = await supabaseClient
                 .from('progress')
-                .upsert({
-                  user_id: username,
-                  progress_data: JSON.stringify(newProgress),
-                  updated_at: new Date().toISOString()
-                });
+                .select('id')
+                .eq('user_id', username)
+                .single();
 
-              if (error) throw error;
+              if (fetchError && fetchError.code !== 'PGRST116') {
+                throw fetchError;
+              }
+
+              let result;
+              if (existingProgress) {
+                // Actualizar registro existente
+                result = await supabaseClient
+                  .from('progress')
+                  .update({
+                    progress_data: JSON.stringify(newProgress),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('user_id', username);
+              } else {
+                // Crear nuevo registro (para el primer guardado)
+                result = await supabaseClient
+                  .from('progress')
+                  .insert({
+                    user_id: username,
+                    progress_data: JSON.stringify(newProgress)
+                  });
+              }
+
+              if (result.error) throw result.error;
               setError(null);
             } catch (err) {
               console.error('Error al guardar:', err);
@@ -314,8 +357,11 @@
           };
 
           const handleLogout = () => {
+            // Solo remover el usuario del localStorage y resetear a vista por defecto
             localStorage.removeItem('goal_tracker_user');
             setUsername('');
+            setInputUsername('');
+            // Restaurar vista por defecto (sin afectar los datos guardados del usuario)
             setProgress({
               travel: 0,
               read: 0,
@@ -325,6 +371,7 @@
             setCategories(DEFAULT_LEGO_COLORS);
             setShowInfoModal(false);
             setShowLoginModal(false);
+            // NO resetear isFirstTimeSetup ya que es específico del usuario
           };
 
           const handleAddClick = () => {
@@ -637,7 +684,7 @@
                         className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         Cancelar
-                      </button>
+                    </button>
                     </div>
                   </div>
                 </div>
