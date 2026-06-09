@@ -430,7 +430,10 @@
                 const raw = localStorage.getItem(getLocalNotesKey(user));
                 if (!raw) return [];
                 try {
-                    return JSON.parse(raw);
+                    const parsed = JSON.parse(raw);
+                    return Array.isArray(parsed)
+                        ? parsed.filter(note => note.content?.trim() !== '' || !note.isNew)
+                        : [];
                 } catch (err) {
                     console.error('Error parseando notas locales:', err);
                     return [];
@@ -462,7 +465,7 @@
             const syncPendingChanges = async (user, currentNotes) => {
                 if (!navigator.onLine || !user) return;
 
-                const notesToSync = currentNotes.filter(note => note.needsSync);
+                const notesToSync = currentNotes.filter(note => note.needsSync && !(note.isNew && note.content.trim() === ''));
                 const deletedIds = loadDeletedIds(user);
                 const updatedNotes = [...currentNotes];
 
@@ -579,12 +582,28 @@
                     saveDeletedIds(user, remainingDeleted);
                 }
 
-                const cleanedNotes = updatedNotes.filter(note => !note._deleted);
+                const cleanedNotes = updatedNotes
+                    .filter(note => !note._deleted)
+                    .filter(note => !(note.isNew && note.content.trim() === ''));
                 cleanedNotes.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
                 updateLocalNotes(user, cleanedNotes);
             };
 
             const markNoteChanged = (noteId, newContent) => {
+                const note = notes.find(n => n.id === noteId);
+                if (!note) return;
+
+                if (note.isNew && newContent.trim() === '') {
+                    const updatedNotes = notes.filter(n => n.id !== noteId);
+                    if (currentNoteId === noteId) {
+                        const nextNote = updatedNotes[0];
+                        setCurrentNoteId(nextNote ? nextNote.id : null);
+                        setNoteContent(nextNote ? nextNote.content : '');
+                    }
+                    updateLocalNotes(username, updatedNotes);
+                    return;
+                }
+
                 const updatedNotes = notes.map(note => {
                     if (note.id !== noteId) return note;
                     return {
@@ -601,8 +620,11 @@
 
             const addLocalNote = (newNote) => {
                 const updatedNotes = [newNote, ...notes];
-                updateLocalNotes(username, updatedNotes);
-                if (navigator.onLine) syncPendingChanges(username, updatedNotes);
+                setNotes(updatedNotes);
+                if (newNote.content.trim() !== '') {
+                    updateLocalNotes(username, updatedNotes);
+                    if (navigator.onLine) syncPendingChanges(username, updatedNotes);
+                }
                 return updatedNotes;
             };
 
