@@ -479,7 +479,7 @@
             const saveNotesToLocal = (user, noteList) => {
                 if (!user) return;
                 const cleanNotes = Array.isArray(noteList)
-                    ? noteList.filter(note => !(note.isNew && note.content.trim() === ''))
+                    ? noteList.filter(note => !(note.isNew && note.content.trim() === '' && note.id !== currentNoteId))
                     : [];
                 localStorage.setItem(getLocalNotesKey(user), JSON.stringify(cleanNotes));
             };
@@ -491,7 +491,7 @@
                 try {
                     const parsed = JSON.parse(raw);
                     return Array.isArray(parsed)
-                        ? parsed.filter(note => note.content?.trim() !== '' || !note.isNew)
+                        ? parsed.filter(note => note.content?.trim() !== '' || note.isNew)
                         : [];
                 } catch (err) {
                     console.error('Error parseando notas locales:', err);
@@ -990,12 +990,16 @@
                         isNew: true
                     };
 
-                    const newNotes = addLocalNote(newNote);
+                    const emptyCurrentNote = notes.find(n => n.id === currentNoteId && n.isNew && n.content.trim() === '');
+                    const baseNotes = emptyCurrentNote ? notes.filter(n => n.id !== currentNoteId) : notes;
+                    const newNotes = [newNote, ...baseNotes];
+                    setNotes(newNotes);
                     setCurrentNoteId(newNote.id);
                     setNoteContent('');
                     setTimeout(() => textareaRef.current?.focus(), 100);
+                    saveNotesToLocal(username, newNotes);
 
-                    if (navigator.onLine) {
+                    if (navigator.onLine && newNote.content.trim() !== '') {
                         await syncPendingChanges(username, newNotes);
                     }
                 } catch (err) {
