@@ -439,6 +439,12 @@
                 localStorage.setItem(getLocalNotesKey(user), JSON.stringify(cleanNotes));
             };
 
+            const saveDraftNotesToLocal = (user, noteList) => {
+                if (!user) return;
+                const draftNotes = Array.isArray(noteList) ? noteList : [];
+                localStorage.setItem(getLocalNotesKey(user), JSON.stringify(draftNotes));
+            };
+
             const loadNotesFromLocal = (user) => {
                 if (!user) return [];
                 const raw = localStorage.getItem(getLocalNotesKey(user));
@@ -712,8 +718,10 @@
                 setNotes(updatedNotes);
                 if (newNote.content.trim() !== '') {
                     updateLocalNotes(username, updatedNotes);
-                    if (navigator.onLine) syncPendingChanges(username, updatedNotes);
+                } else {
+                    saveDraftNotesToLocal(username, updatedNotes);
                 }
+                if (navigator.onLine) syncPendingChanges(username, updatedNotes);
                 return updatedNotes;
             };
 
@@ -1036,7 +1044,7 @@
                                 disabled={isLoading || !currentNoteId || !noteContent.trim()}
                                 title="Copiar nota activa"
                             >
-                                📋
+                                ⎘
                             </button>
                             {clipboardAvailable && (
                                 <button
@@ -1045,7 +1053,7 @@
                                     disabled={isLoading}
                                     title="Pegar en nueva nota"
                                 >
-                                    📥
+                                    ⎙
                                 </button>
                             )}
                         </div>
