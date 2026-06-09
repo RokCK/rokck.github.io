@@ -386,6 +386,232 @@
             const [modalOpen, setModalOpen] = useState(false);
             const textareaRef = useRef(null);
 
+            const getLocalNotesKey = (user) => `noterok_notes_${user}`;
+            const getDeletedIdsKey = (user) => `noterok_deleted_${user}`;
+            const getLocalSessionKey = () => 'noterok_user';
+
+            const normalizeTitle = (title) => {
+                return title.trim().replace(/\s+/g, ' ');
+            };
+
+            const getTitleFromContent = (content, fallbackTitle) => {
+                const text = (content || '').trim();
+                if (!text) return fallbackTitle || 'Nota';
+
+                const firstLine = text.split('\n')[0].trim();
+                const words = firstLine.split(/\s+/).filter(Boolean);
+                if (words.length <= 3) {
+                    return firstLine;
+                }
+                return words.slice(0, 3).join(' ');
+            };
+
+            const buildVersionedTitle = (title, existingTitles) => {
+                const normalized = normalizeTitle(title).replace(/\s*\(v\d+\)$/i, '');
+                let version = 2;
+                const exists = (candidate) => existingTitles.some(t => normalizeTitle(t).toLowerCase() === normalizeTitle(candidate).toLowerCase());
+                while (exists(`${normalized} (v${version})`)) {
+                    version += 1;
+                }
+                return `${normalized} (v${version})`;
+            };
+
+            const saveNotesToLocal = (user, noteList) => {
+                if (!user) return;
+                localStorage.setItem(getLocalNotesKey(user), JSON.stringify(noteList));
+            };
+
+            const loadNotesFromLocal = (user) => {
+                if (!user) return [];
+                const raw = localStorage.getItem(getLocalNotesKey(user));
+                if (!raw) return [];
+                try {
+                    return JSON.parse(raw);
+                } catch (err) {
+                    console.error('Error parseando notas locales:', err);
+                    return [];
+                }
+            };
+
+            const saveDeletedIds = (user, deletedIds) => {
+                if (!user) return;
+                localStorage.setItem(getDeletedIdsKey(user), JSON.stringify(deletedIds));
+            };
+
+            const loadDeletedIds = (user) => {
+                if (!user) return [];
+                const raw = localStorage.getItem(getDeletedIdsKey(user));
+                if (!raw) return [];
+                try {
+                    return JSON.parse(raw);
+                } catch (err) {
+                    console.error('Error parseando eliminaciones locales:', err);
+                    return [];
+                }
+            };
+
+            const updateLocalNotes = (user, updatedNotes) => {
+                setNotes(updatedNotes);
+                saveNotesToLocal(user, updatedNotes);
+            };
+
+            const syncPendingChanges = async (user, currentNotes) => {
+                if (!navigator.onLine || !user) return;
+
+                const notesToSync = currentNotes.filter(note => note.needsSync);
+                const deletedIds = loadDeletedIds(user);
+                const updatedNotes = [...currentNotes];
+
+                for (const note of notesToSync) {
+                    try {
+                        const localIndex = updatedNotes.findIndex(n => n.id === note.id);
+                        if (note.isNew) {
+                            const { data, error } = await supabaseClient
+                                .from('notes')
+                                .insert({
+                                    id: note.id,
+                                    user_id: user,
+                                    title: note.title,
+                                    content: note.content,
+                                    created_at: note.created_at || new Date().toISOString(),
+                                    updated_at: note.updated_at
+                                })
+                                .select()
+                                .single();
+
+                            if (error) throw error;
+                            updatedNotes[localIndex] = {
+                                ...note,
+                                isNew: false,
+                                needsSync: false,
+                                server_updated_at: data.updated_at
+                            };
+                        } else {
+                            const { data: serverNote, error: fetchError } = await supabaseClient
+                                .from('notes')
+                                .select('id, title, content, updated_at')
+                                .eq('id', note.id)
+                                .eq('user_id', user)
+                                .single();
+
+                            if (fetchError && fetchError.code !== 'PGRST116') {
+                                throw fetchError;
+                            }
+
+                            const serverUpdatedAt = serverNote?.updated_at;
+                            const hasConflict = serverUpdatedAt && note.server_updated_at && new Date(serverUpdatedAt) > new Date(note.server_updated_at);
+
+                            if (serverNote && hasConflict) {
+                                const existingTitles = updatedNotes.map(n => n.title);
+                                const versionedTitle = buildVersionedTitle(note.title, existingTitles);
+                                const newNoteId = crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+                                const { data, error } = await supabaseClient
+                                    .from('notes')
+                                    .insert({
+                                        id: newNoteId,
+                                        user_id: user,
+                                        title: versionedTitle,
+                                        content: note.content,
+                                        created_at: new Date().toISOString(),
+                                        updated_at: note.updated_at
+                                    })
+                                    .select()
+                                    .single();
+
+                                if (error) throw error;
+
+                                updatedNotes[localIndex] = {
+                                    ...note,
+                                    id: data.id,
+                                    title: data.title,
+                                    isNew: false,
+                                    needsSync: false,
+                                    server_updated_at: data.updated_at
+                                };
+                                if (currentNoteId === note.id) {
+                                    setCurrentNoteId(data.id);
+                                }
+                            } else {
+                                const { error } = await supabaseClient
+                                    .from('notes')
+                                    .update({
+                                        title: note.title,
+                                        content: note.content,
+                                        updated_at: note.updated_at
+                                    })
+                                    .eq('id', note.id)
+                                    .eq('user_id', user);
+
+                                if (error) throw error;
+                                updatedNotes[localIndex] = {
+                                    ...note,
+                                    needsSync: false,
+                                    server_updated_at: note.updated_at
+                                };
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error sincronizando nota:', note.id, err);
+                    }
+                }
+
+                if (deletedIds.length > 0) {
+                    const syncedIds = [];
+                    for (const id of deletedIds) {
+                        try {
+                            const { error } = await supabaseClient
+                                .from('notes')
+                                .delete()
+                                .eq('id', id)
+                                .eq('user_id', user);
+
+                            if (error) throw error;
+                            syncedIds.push(id);
+                        } catch (err) {
+                            console.error('Error sincronizando eliminación:', id, err);
+                        }
+                    }
+                    const remainingDeleted = deletedIds.filter(id => !syncedIds.includes(id));
+                    saveDeletedIds(user, remainingDeleted);
+                }
+
+                const cleanedNotes = updatedNotes.filter(note => !note._deleted);
+                cleanedNotes.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                updateLocalNotes(user, cleanedNotes);
+            };
+
+            const markNoteChanged = (noteId, newContent) => {
+                const updatedNotes = notes.map(note => {
+                    if (note.id !== noteId) return note;
+                    return {
+                        ...note,
+                        content: newContent,
+                        title: getTitleFromContent(newContent, note.title),
+                        updated_at: new Date().toISOString(),
+                        needsSync: true
+                    };
+                });
+                updateLocalNotes(username, updatedNotes);
+                if (navigator.onLine) syncPendingChanges(username, updatedNotes);
+            };
+
+            const addLocalNote = (newNote) => {
+                const updatedNotes = [newNote, ...notes];
+                updateLocalNotes(username, updatedNotes);
+                if (navigator.onLine) syncPendingChanges(username, updatedNotes);
+                return updatedNotes;
+            };
+
+            const removeLocalNote = (noteId) => {
+                const updatedNotes = notes.filter(note => note.id !== noteId);
+                const deletedIds = loadDeletedIds(username);
+                const newDeletedIds = deletedIds.includes(noteId) ? deletedIds : [...deletedIds, noteId];
+                saveDeletedIds(username, newDeletedIds);
+                updateLocalNotes(username, updatedNotes);
+                if (navigator.onLine) syncPendingChanges(username, updatedNotes);
+                return updatedNotes;
+            };
+
             // Login
             const handleLogin = async () => {
                 const user = inputUsername.trim().toLowerCase();
@@ -437,24 +663,55 @@
             // Cargar notas
             const loadNotes = async (user) => {
                 try {
+                    const localNotes = loadNotesFromLocal(user);
+
+                    if (!navigator.onLine) {
+                        setNotes(localNotes);
+                        if (localNotes.length > 0) {
+                            setCurrentNoteId(localNotes[0].id);
+                            setNoteContent(localNotes[0].content);
+                        }
+                        return;
+                    }
+
                     const { data, error } = await supabaseClient
                         .from('notes')
                         .select('id, title, content, created_at, updated_at')
                         .eq('user_id', user)
                         .order('updated_at', { ascending: false });
 
-                    if (error) throw error;
-
-                    setNotes(data || []);
-                    
-                    if (data && data.length > 0) {
-                        setCurrentNoteId(data[0].id);
-                        setNoteContent(data[0].content);
+                    if (error) {
+                        throw error;
                     }
-                    
+
+                    const serverNotes = (data || []).map(note => ({
+                        ...note,
+                        needsSync: false,
+                        isNew: false
+                    }));
+
+                    const notesToUse = serverNotes.length > 0 ? serverNotes : localNotes;
+                    setNotes(notesToUse);
+
+                    if (notesToUse.length > 0) {
+                        setCurrentNoteId(notesToUse[0].id);
+                        setNoteContent(notesToUse[0].content);
+                    }
+
+                    saveNotesToLocal(user, notesToUse);
                 } catch (err) {
                     console.error('Error cargando notas:', err);
-                    setLoginError('Error al cargar notas: ' + err.message);
+                    const localNotes = loadNotesFromLocal(user);
+                    if (localNotes.length > 0) {
+                        setNotes(localNotes);
+                        setCurrentNoteId(localNotes[0].id);
+                        setNoteContent(localNotes[0].content);
+                    } else {
+                        setNotes([]);
+                        setCurrentNoteId(null);
+                        setNoteContent('');
+                    }
+                    setLoginError('Modo offline: usando notas locales');
                 } finally {
                     setIsLoading(false);
                 }
@@ -475,31 +732,10 @@
             useEffect(() => {
                 if (!username || !currentNoteId) return;
 
-                const timer = setTimeout(async () => {
+                const timer = setTimeout(() => {
                     const currentNote = notes.find(n => n.id === currentNoteId);
-                    if (noteContent === currentNote?.content) return;
-
-                    try {
-                        await supabaseClient
-                            .from('notes')
-                            .update({
-                                content: noteContent,
-                                updated_at: new Date().toISOString()
-                            })
-                            .eq('id', currentNoteId)
-                            .eq('user_id', username);
-
-                        const updatedNotes = notes.map(n => 
-                            n.id === currentNoteId 
-                                ? { ...n, content: noteContent, updated_at: new Date().toISOString() }
-                                : n
-                        ).sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-                        
-                        setNotes(updatedNotes);
-
-                    } catch (err) {
-                        console.error('Error guardando:', err);
-                    }
+                    if (!currentNote || noteContent === currentNote.content) return;
+                    markNoteChanged(currentNoteId, noteContent);
                 }, 2000);
 
                 return () => clearTimeout(timer);
@@ -512,25 +748,25 @@
 
                     const noteCount = notes.length + 1;
                     const newTitle = `Nota ${noteCount}`;
+                    const noteId = crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}`;
+                    const newNote = {
+                        id: noteId,
+                        title: newTitle,
+                        content: '',
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                        needsSync: true,
+                        isNew: true
+                    };
 
-                    const { data, error } = await supabaseClient
-                        .from('notes')
-                        .insert({
-                            user_id: username,
-                            title: newTitle,
-                            content: ''
-                        })
-                        .select()
-                        .single();
-
-                    if (error) throw error;
-
-                    const newNotes = [data, ...notes];
-                    setNotes(newNotes);
-                    setCurrentNoteId(data.id);
+                    const newNotes = addLocalNote(newNote);
+                    setCurrentNoteId(newNote.id);
                     setNoteContent('');
                     setTimeout(() => textareaRef.current?.focus(), 100);
 
+                    if (navigator.onLine) {
+                        await syncPendingChanges(username, newNotes);
+                    }
                 } catch (err) {
                     console.error('Error creando nota:', err);
                 } finally {
@@ -541,21 +777,23 @@
             // Eliminar nota
             const deleteNote = async (noteId, e) => {
                 e.stopPropagation();
-                
+
                 if (!confirm('¿Estás seguro?')) return;
 
                 try {
-                    const { error } = await supabaseClient
-                        .from('notes')
-                        .delete()
-                        .eq('id', noteId)
-                        .eq('user_id', username);
+                    if (navigator.onLine) {
+                        const { error } = await supabaseClient
+                            .from('notes')
+                            .delete()
+                            .eq('id', noteId)
+                            .eq('user_id', username);
 
-                    if (error) throw error;
+                        if (error) throw error;
+                    }
 
-                    const updatedNotes = notes.filter(n => n.id !== noteId);
+                    const updatedNotes = removeLocalNote(noteId);
                     setNotes(updatedNotes);
-                    
+
                     if (currentNoteId === noteId) {
                         if (updatedNotes.length > 0) {
                             setCurrentNoteId(updatedNotes[0].id);
@@ -565,7 +803,6 @@
                             setNoteContent('');
                         }
                     }
-
                 } catch (err) {
                     console.error('Error eliminando:', err);
                 }
@@ -591,6 +828,18 @@
                     loadNotes(savedUsername);
                 }
             }, []);
+
+            // Re-sincronizar cuando vuelva la conexión
+            useEffect(() => {
+                const handleOnline = () => {
+                    if (!username) return;
+                    const localNotes = loadNotesFromLocal(username);
+                    syncPendingChanges(username, localNotes);
+                };
+
+                window.addEventListener('online', handleOnline);
+                return () => window.removeEventListener('online', handleOnline);
+            }, [username]);
 
             // Login Screen
             if (!username) {
@@ -705,15 +954,6 @@
 
                         <div className="user-info">
                             Usuario: <strong>{username}</strong>
-                        </div>
-
-                        <div className="modal-footer">
-                            <button 
-                                className="modal-footer-btn logout"
-                                onClick={handleLogout}
-                            >
-                                Logout
-                            </button>
                         </div>
                     </div>
                 </div>
