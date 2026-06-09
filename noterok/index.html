@@ -691,6 +691,8 @@
                     return;
                 }
 
+                if (!note.needsSync && note.content === newContent) return;
+
                 const updatedNotes = notes.map(note => {
                     if (note.id !== noteId) return note;
                     return {
@@ -880,13 +882,16 @@
                 if (!username || !currentNoteId) return;
 
                 const timer = setTimeout(() => {
-                    const currentNote = notes.find(n => n.id === currentNoteId);
-                    if (!currentNote || noteContent === currentNote.content) return;
                     markNoteChanged(currentNoteId, noteContent);
                 }, 2000);
 
                 return () => clearTimeout(timer);
             }, [noteContent, currentNoteId, username]);
+
+            useEffect(() => {
+                if (!currentNoteId) return;
+                setTimeout(() => textareaRef.current?.focus(), 0);
+            }, [currentNoteId]);
 
             // Crear nueva nota
             const createNewNote = async () => {
