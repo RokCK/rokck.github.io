@@ -740,6 +740,10 @@
                 if (!note) return;
 
                 if (note.isNew && newContent.trim() === '') {
+                    if (currentNoteId === noteId) {
+                        // Mantener la nota abierta mientras el usuario está escribiendo
+                        return;
+                    }
                     const updatedNotes = notes.filter(n => n.id !== noteId);
                     if (currentNoteId === noteId) {
                         const nextNote = updatedNotes[0];
@@ -798,35 +802,27 @@
                 try {
                     setIsLoading(true);
                     
-                    const { data: userData, error: userError } = await supabaseClient
-                        .from('users')
-                        .select('*')
-                        .eq('username', user)
-                        .single();
-
-                    if (userError) {
-                        if (userError.code === 'PGRST116') {
-                            setLoginError('Usuario no encontrado');
-                        } else {
-                            throw userError;
-                        }
-                        setIsLoading(false);
-                        return;
-                    }
-
-                    if (!userData || !userData.is_active) {
-                        setLoginError('Usuario no autorizado o inactivo');
-                        setIsLoading(false);
-                        return;
-                    }
-
                     if (!inputPassword) {
                         setLoginError('Ingresa tu contraseña');
                         setIsLoading(false);
                         return;
                     }
 
-                    if (userData.password !== inputPassword) {
+                    const { data: userData, error: userError } = await supabaseClient
+                        .rpc('verify_user_password', {
+                            in_username: user,
+                            in_password: inputPassword
+                        })
+                        .single();
+
+                    if (userError) {
+                        console.error('Login RPC error:', userError);
+                        setLoginError('Usuario o contraseña incorrectos');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    if (!userData || !userData.is_active) {
                         setLoginError('Usuario o contraseña incorrectos');
                         setIsLoading(false);
                         return;
