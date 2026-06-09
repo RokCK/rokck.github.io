@@ -305,6 +305,21 @@
             color: #fff;
         }
 
+        .note-action-btn {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px 8px;
+            transition: color 0.2s;
+            flex-shrink: 0;
+        }
+
+        .note-action-btn:hover {
+            color: #ccc;
+        }
+
         .note-delete-btn {
             background: none;
             border: none;
@@ -421,6 +436,21 @@
                 return words.slice(0, 3).join(' ');
             };
 
+            const getUniqueTitle = (baseTitle, noteIdToSkip = null) => {
+                const normalized = normalizeTitle(baseTitle).replace(/\s*\(v\d+\)$/i, '');
+                if (!normalized) return baseTitle;
+                const lowerBase = normalized.toLowerCase();
+                const existingTitles = notes
+                    .filter(n => n.id !== noteIdToSkip)
+                    .map(n => normalizeTitle(n.title).toLowerCase());
+                if (!existingTitles.includes(lowerBase)) return normalized;
+                let version = 2;
+                while (existingTitles.includes(`${normalized} (v${version})`.toLowerCase())) {
+                    version += 1;
+                }
+                return `${normalized} (v${version})`;
+            };
+
             const buildVersionedTitle = (title, existingTitles) => {
                 const normalized = normalizeTitle(title).replace(/\s*\(v\d+\)$/i, '');
                 let version = 2;
@@ -437,12 +467,6 @@
                     ? noteList.filter(note => !(note.isNew && note.content.trim() === ''))
                     : [];
                 localStorage.setItem(getLocalNotesKey(user), JSON.stringify(cleanNotes));
-            };
-
-            const saveDraftNotesToLocal = (user, noteList) => {
-                if (!user) return;
-                const draftNotes = Array.isArray(noteList) ? noteList : [];
-                localStorage.setItem(getLocalNotesKey(user), JSON.stringify(draftNotes));
             };
 
             const loadNotesFromLocal = (user) => {
@@ -670,16 +694,30 @@
                 const updatedNotes = notes.map(note => {
                     if (note.id !== noteId) return note;
                     if (note.isNew && newContent.trim() === '') return note;
+                    const baseTitle = getTitleFromContent(newContent, note.title);
                     return {
                         ...note,
                         content: newContent,
-                        title: getTitleFromContent(newContent, note.title),
+                        title: getUniqueTitle(baseTitle, noteId),
                         updated_at: new Date().toISOString(),
                         needsSync: true
                     };
                 });
                 setNotes(updatedNotes);
                 saveNotesToLocal(username, updatedNotes);
+            };
+
+            const downloadNoteAsTxt = (note) => {
+                const blob = new Blob([note.content || ''], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const filename = `${note.title || 'nota'}.txt`.replace(/[^a-zA-Z0-9-_\. ]/g, '_');
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
             };
 
             const markNoteChanged = (noteId, newContent) => {
@@ -701,10 +739,11 @@
 
                 const updatedNotes = notes.map(note => {
                     if (note.id !== noteId) return note;
+                    const baseTitle = getTitleFromContent(newContent, note.title);
                     return {
                         ...note,
                         content: newContent,
-                        title: getTitleFromContent(newContent, note.title),
+                        title: getUniqueTitle(baseTitle, noteId),
                         updated_at: new Date().toISOString(),
                         needsSync: true
                     };
@@ -716,11 +755,6 @@
             const addLocalNote = (newNote) => {
                 const updatedNotes = [newNote, ...notes];
                 setNotes(updatedNotes);
-                if (newNote.content.trim() !== '') {
-                    updateLocalNotes(username, updatedNotes);
-                } else {
-                    saveDraftNotesToLocal(username, updatedNotes);
-                }
                 if (navigator.onLine) syncPendingChanges(username, updatedNotes);
                 return updatedNotes;
             };
@@ -900,6 +934,11 @@
                 if (!currentNoteId) return;
                 setTimeout(() => textareaRef.current?.focus(), 0);
             }, [currentNoteId]);
+
+            useEffect(() => {
+                if (!username) return;
+                saveNotesToLocal(username, notes);
+            }, [username, notes]);
 
             // Crear nueva nota
             const createNewNote = async () => {
@@ -1128,6 +1167,16 @@
                                             <div className="note-item-content">
                                                 <div className="note-item-title">{note.title}</div>
                                             </div>
+                                            <button
+                                                className="note-action-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    downloadNoteAsTxt(note);
+                                                }}
+                                                title="Descargar nota"
+                                            >
+                                                ↓
+                                            </button>
                                             <button
                                                 className="note-delete-btn"
                                                 onClick={(e) => deleteNote(note.id, e)}
