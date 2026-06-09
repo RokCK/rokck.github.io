@@ -755,7 +755,9 @@
             const addLocalNote = (newNote) => {
                 const updatedNotes = [newNote, ...notes];
                 setNotes(updatedNotes);
-                if (navigator.onLine) syncPendingChanges(username, updatedNotes);
+                if (navigator.onLine && newNote.content.trim() !== '') {
+                    syncPendingChanges(username, updatedNotes);
+                }
                 return updatedNotes;
             };
 
