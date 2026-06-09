@@ -451,6 +451,20 @@
                 return `${normalized} (v${version})`;
             };
 
+            const mergeLocalAndServerNotes = (serverNotes, localNotes) => {
+                const localById = new Map(localNotes.map(note => [note.id, note]));
+                const mergedServer = serverNotes.map(serverNote => {
+                    const localNote = localById.get(serverNote.id);
+                    if (localNote && localNote.needsSync) {
+                        return localNote;
+                    }
+                    return serverNote;
+                });
+                const serverIds = new Set(serverNotes.map(note => note.id));
+                const extraLocalNotes = localNotes.filter(note => !serverIds.has(note.id));
+                return sortNotesByCreatedAt([...mergedServer, ...extraLocalNotes]);
+            };
+
             const buildVersionedTitle = (title, existingTitles) => {
                 const normalized = normalizeTitle(title).replace(/\s*\(v\d+\)$/i, '');
                 let version = 2;
@@ -851,7 +865,9 @@
                         isNew: false
                     }));
 
-                    const notesToUse = serverNotes.length > 0 ? serverNotes : localNotes;
+                    const notesToUse = serverNotes.length > 0
+                        ? mergeLocalAndServerNotes(serverNotes, localNotes)
+                        : localNotes;
 
                     if (notesToUse.length === 0) {
                         const initialNoteId = crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}`;
