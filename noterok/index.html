@@ -422,7 +422,10 @@
 
             const saveNotesToLocal = (user, noteList) => {
                 if (!user) return;
-                localStorage.setItem(getLocalNotesKey(user), JSON.stringify(noteList));
+                const cleanNotes = Array.isArray(noteList)
+                    ? noteList.filter(note => !(note.isNew && note.content.trim() === ''))
+                    : [];
+                localStorage.setItem(getLocalNotesKey(user), JSON.stringify(cleanNotes));
             };
 
             const loadNotesFromLocal = (user) => {
@@ -589,6 +592,22 @@
                 updateLocalNotes(user, cleanedNotes);
             };
 
+            const updateDraftNote = (noteId, newContent) => {
+                const updatedNotes = notes.map(note => {
+                    if (note.id !== noteId) return note;
+                    if (note.isNew && newContent.trim() === '') return note;
+                    return {
+                        ...note,
+                        content: newContent,
+                        title: getTitleFromContent(newContent, note.title),
+                        updated_at: new Date().toISOString(),
+                        needsSync: true
+                    };
+                });
+                setNotes(updatedNotes);
+                saveNotesToLocal(username, updatedNotes);
+            };
+
             const markNoteChanged = (noteId, newContent) => {
                 const note = notes.find(n => n.id === noteId);
                 if (!note) return;
@@ -718,6 +737,25 @@
                     }));
 
                     const notesToUse = serverNotes.length > 0 ? serverNotes : localNotes;
+
+                    if (notesToUse.length === 0) {
+                        const initialNoteId = crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}`;
+                        const initialNote = {
+                            id: initialNoteId,
+                            title: 'Nota 1',
+                            content: '',
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                            needsSync: true,
+                            isNew: true
+                        };
+                        setNotes([initialNote]);
+                        setCurrentNoteId(initialNote.id);
+                        setNoteContent('');
+                        setTimeout(() => textareaRef.current?.focus(), 100);
+                        return;
+                    }
+
                     setNotes(notesToUse);
 
                     if (notesToUse.length > 0) {
@@ -736,9 +774,20 @@
                         setNoteContent(localNotes[0].content);
                         setTimeout(() => textareaRef.current?.focus(), 100);
                     } else {
-                        setNotes([]);
-                        setCurrentNoteId(null);
+                        const initialNoteId = crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}`;
+                        const initialNote = {
+                            id: initialNoteId,
+                            title: 'Nota 1',
+                            content: '',
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                            needsSync: true,
+                            isNew: true
+                        };
+                        setNotes([initialNote]);
+                        setCurrentNoteId(initialNote.id);
                         setNoteContent('');
+                        setTimeout(() => textareaRef.current?.focus(), 100);
                     }
                     setLoginError('Modo offline: usando notas locales');
                 } finally {
@@ -928,7 +977,13 @@
                             ref={textareaRef}
                             className="editor-textarea"
                             value={noteContent}
-                            onChange={(e) => setNoteContent(e.target.value)}
+                            onChange={(e) => {
+                                const newContent = e.target.value;
+                                setNoteContent(newContent);
+                                if (currentNoteId) {
+                                    updateDraftNote(currentNoteId, newContent);
+                                }
+                            }}
                             disabled={!currentNoteId || isLoading}
                             autoFocus
                         />
