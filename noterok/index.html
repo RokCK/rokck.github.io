@@ -402,6 +402,7 @@
         const NoteRok = () => {
             const [username, setUsername] = useState('');
             const [inputUsername, setInputUsername] = useState('');
+            const [inputPassword, setInputPassword] = useState('');
             const [loginError, setLoginError] = useState('');
             const [isLoading, setIsLoading] = useState(false);
             const [notes, setNotes] = useState([]);
@@ -819,10 +820,23 @@
                         return;
                     }
 
+                    if (!inputPassword) {
+                        setLoginError('Ingresa tu contraseña');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    if (userData.password !== inputPassword) {
+                        setLoginError('Usuario o contraseña incorrectos');
+                        setIsLoading(false);
+                        return;
+                    }
+
                     localStorage.setItem('noterok_user', user);
                     setUsername(user);
                     setLoginError('');
                     setInputUsername('');
+                    setInputPassword('');
                     
                     await loadNotes(user);
                     refreshClipboardState();
@@ -1075,6 +1089,15 @@
                                     onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
                                     disabled={isLoading}
                                     autoFocus
+                                />
+                                <input
+                                    type="password"
+                                    className="login-input"
+                                    placeholder="Contraseña"
+                                    value={inputPassword}
+                                    onChange={(e) => setInputPassword(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                                    disabled={isLoading}
                                 />
                                 <button 
                                     className="login-btn"
