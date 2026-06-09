@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="https://i.ibb.co/4wzJ2vTq/image.png">
+    <title>NoteRok</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        textarea {
+            font-family: 'Courier New', Courier, monospace !important;
+            resize: vertical;
+        }
+
+        textarea::placeholder {
+            color: #999;
+        }
+
+        .noterok-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .login-card {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            margin-top: 100px;
+        }
+
+        .login-card h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .login-input {
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .login-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .login-btn {
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .login-error {
+            color: #e74c3c;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .editor-header {
+            background: white;
+            border-radius: 12px 12px 0 0;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .editor-header h2 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .select-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .select-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-small {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-new {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-new:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        .btn-delete {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #c0392b;
+            transform: translateY(-1px);
+        }
+
+        .btn-logout {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .btn-logout:hover {
+            background: #7f8c8d;
+            transform: translateY(-1px);
+        }
+
+        .editor-area {
+            background: white;
+            border-radius: 0 0 12px 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        }
+
+        .editor-textarea {
+            width: 100%;
+            height: 600px;
+            padding: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
+            transition: border-color 0.2s;
+        }
+
+        .editor-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .autosave-indicator {
+            font-size: 12px;
+            color: #27ae60;
+            margin-top: 10px;
+            text-align: right;
+        }
+
+        .autosave-saving {
+            color: #f39c12;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 400px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .note-count {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createClient } = supabase;
+
+        // Supabase Config (mismo que Goal Tracker)
+        const supabaseUrl = 'https://zgohawnfwbhyuubgzhit.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpnb2hhd25md2JoeXV1Ymd6aGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2NjExNTQsImV4cCI6MjA4MzIzNzE1NH0.3AF50DVfjnXhlx_chrPFeVXtnhRvFPhreZFq30y1mSY';
+        const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+        const NoteRok = () => {
+            const [username, setUsername] = useState('');
+            const [inputUsername, setInputUsername] = useState('');
+            const [loginError, setLoginError] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const [notes, setNotes] = useState([]);
+            const [currentNoteId, setCurrentNoteId] = useState(null);
+            const [noteContent, setNoteContent] = useState('');
+            const [autoSaveStatus, setAutoSaveStatus] = useState('');
+            const [isSaving, setIsSaving] = useState(false);
+            const [noteTitle, setNoteTitle] = useState('');
+
+            // Login
+            const handleLogin = async () => {
+                const user = inputUsername.trim().toLowerCase();
+                
+                if (!user) {
+                    setLoginError('Por favor ingresa un usuario');
+                    return;
+                }
+
+                try {
+                    setIsLoading(true);
+                    
+                    // Verificar si usuario existe en tabla 'users'
+                    const { data: userData, error: userError } = await supabaseClient
+                        .from('users')
+                        .select('*')
+                        .eq('username', user)
+                        .single();
+
+                    if (userError) {
+                        if (userError.code === 'PGRST116') {
+                            setLoginError('Usuario no encontrado');
+                        } else {
+                            throw userError;
+                        }
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    if (!userData || !userData.is_active) {
+                        setLoginError('Usuario no autorizado o inactivo');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    // Guardar sesión
+                    localStorage.setItem('noterok_user', user);
+                    setUsername(user);
+                    setLoginError('');
+                    setInputUsername('');
+                    
+                    // Cargar notas
+                    await loadNotes(user);
+                    
+                } catch (err) {
+                    console.error('Error en login:', err);
+                    setLoginError('Error: ' + err.message);
+                    setIsLoading(false);
+                }
+            };
+
+            // Cargar notas del usuario
+            const loadNotes = async (user) => {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('notes')
+                        .select('id, title, content, created_at')
+                        .eq('user_id', user)
+                        .order('created_at', { ascending: false });
+
+                    if (error) throw error;
+
+                    setNotes(data || []);
+                    setCurrentNoteId(null);
+                    setNoteContent('');
+                    setNoteTitle('');
+                    setAutoSaveStatus('');
+                    
+                } catch (err) {
+                    console.error('Error cargando notas:', err);
+                    setLoginError('Error al cargar notas: ' + err.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            // Seleccionar nota
+            const selectNote = async (noteId) => {
+                const note = notes.find(n => n.id === noteId);
+                if (note) {
+                    setCurrentNoteId(noteId);
+                    setNoteTitle(note.title);
+                    setNoteContent(note.content);
+                    setAutoSaveStatus('');
+                }
+            };
+
+            // Autoguardado
+            useEffect(() => {
+                if (!username || !currentNoteId) return;
+
+                const timer = setTimeout(async () => {
+                    if (noteContent === notes.find(n => n.id === currentNoteId)?.content) {
+                        return; // No hubo cambios
+                    }
+
+                    try {
+                        setIsSaving(true);
+                        setAutoSaveStatus('Guardando...');
+
+                        const { error } = await supabaseClient
+                            .from('notes')
+                            .update({
+                                content: noteContent,
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('id', currentNoteId)
+                            .eq('user_id', username);
+
+                        if (error) throw error;
+
+                        setAutoSaveStatus('Guardado ✓');
+                        setIsSaving(false);
+
+                        setTimeout(() => {
+                            if (!isSaving) setAutoSaveStatus('');
+                        }, 2000);
+
+                    } catch (err) {
+                        console.error('Error guardando:', err);
+                        setAutoSaveStatus('Error al guardar');
+                    }
+                }, 2000); // Guardar cada 2 segundos después de dejar de escribir
+
+                return () => clearTimeout(timer);
+            }, [noteContent, currentNoteId, username]);
+
+            // Crear nueva nota
+            const createNewNote = async () => {
+                try {
+                    setIsLoading(true);
+
+                    const noteCount = notes.length + 1;
+                    const newTitle = `Nota ${noteCount}`;
+
+                    const { data, error } = await supabaseClient
+                        .from('notes')
+                        .insert({
+                            user_id: username,
+                            title: newTitle,
+                            content: ''
+                        })
+                        .select()
+                        .single();
+
+                    if (error) throw error;
+
+                    const newNotes = [data, ...notes];
+                    setNotes(newNotes);
+                    setCurrentNoteId(data.id);
+                    setNoteTitle(data.title);
+                    setNoteContent('');
+                    setAutoSaveStatus('');
+
+                } catch (err) {
+                    console.error('Error creando nota:', err);
+                    setLoginError('Error: ' + err.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            // Eliminar nota
+            const deleteNote = async () => {
+                if (!currentNoteId) return;
+
+                if (!confirm('¿Estás seguro que deseas eliminar esta nota?')) {
+                    return;
+                }
+
+                try {
+                    setIsLoading(true);
+
+                    const { error } = await supabaseClient
+                        .from('notes')
+                        .delete()
+                        .eq('id', currentNoteId)
+                        .eq('user_id', username);
+
+                    if (error) throw error;
+
+                    const updatedNotes = notes.filter(n => n.id !== currentNoteId);
+                    setNotes(updatedNotes);
+                    setCurrentNoteId(null);
+                    setNoteContent('');
+                    setNoteTitle('');
+                    setAutoSaveStatus('');
+
+                } catch (err) {
+                    console.error('Error eliminando nota:', err);
+                    setLoginError('Error: ' + err.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            // Logout
+            const handleLogout = () => {
+                localStorage.removeItem('noterok_user');
+                setUsername('');
+                setNotes([]);
+                setCurrentNoteId(null);
+                setNoteContent('');
+                setNoteTitle('');
+                setLoginError('');
+            };
+
+            // Verificar sesión guardada
+            useEffect(() => {
+                const savedUsername = localStorage.getItem('noterok_user');
+                if (savedUsername) {
+                    setUsername(savedUsername);
+                    setIsLoading(true);
+                    loadNotes(savedUsername);
+                }
+            }, []);
+
+            // Interfaz de Login
+            if (!username) {
+                return (
+                    <div className="noterok-container">
+                        <div className="login-card">
+                            <h1>📝 NoteRok</h1>
+                            <p style={{ color: '#666', marginBottom: '30px', fontSize: '16px' }}>
+                                Tu Notepad personal sin complicaciones
+                            </p>
+                            <div className="login-form">
+                                <input
+                                    type="text"
+                                    className="login-input"
+                                    placeholder="Usuario"
+                                    value={inputUsername}
+                                    onChange={(e) => setInputUsername(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                                    disabled={isLoading}
+                                />
+                                <button 
+                                    className="login-btn"
+                                    onClick={handleLogin}
+                                    disabled={isLoading}
+                                >
+                                    {isLoading ? 'Cargando...' : 'Acceder'}
+                                </button>
+                                {loginError && <div className="login-error">{loginError}</div>}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Interfaz de Editor
+            return (
+                <div className="noterok-container">
+                    <div style={{ marginBottom: '20px' }}>
+                        <div className="editor-header">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <h2>📝 NoteRok</h2>
+                                    <p style={{ color: '#666', fontSize: '14px' }}>Usuario: <strong>{username}</strong></p>
+                                </div>
+                                <button className="btn-small btn-logout" onClick={handleLogout}>
+                                    Logout
+                                </button>
+                            </div>
+
+                            <div className="header-controls">
+                                <select 
+                                    className="select-input"
+                                    value={currentNoteId || ''}
+                                    onChange={(e) => selectNote(e.target.value)}
+                                    disabled={isLoading}
+                                >
+                                    <option value="">-- Selecciona una nota --</option>
+                                    {notes.map(note => (
+                                        <option key={note.id} value={note.id}>
+                                            {note.title}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <button 
+                                    className="btn-small btn-new"
+                                    onClick={createNewNote}
+                                    disabled={isLoading}
+                                >
+                                    + Nueva Nota
+                                </button>
+
+                                <button 
+                                    className="btn-small btn-delete"
+                                    onClick={deleteNote}
+                                    disabled={!currentNoteId || isLoading}
+                                >
+                                    🗑️ Eliminar
+                                </button>
+                            </div>
+
+                            <div className="note-count">
+                                Total de notas: <strong>{notes.length}</strong>
+                            </div>
+                        </div>
+
+                        <div className="editor-area">
+                            {!currentNoteId ? (
+                                <div style={{ textAlign: 'center', color: '#999', padding: '40px' }}>
+                                    <p style={{ fontSize: '16px' }}>Selecciona una nota o crea una nueva para comenzar</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <textarea
+                                        className="editor-textarea"
+                                        value={noteContent}
+                                        onChange={(e) => setNoteContent(e.target.value)}
+                                        placeholder="Comienza a escribir..."
+                                        disabled={isLoading}
+                                    />
+                                    <div className={`autosave-indicator ${isSaving ? 'autosave-saving' : ''}`}>
+                                        {autoSaveStatus}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<NoteRok />, document.getElementById('root'));
+    </script>
+</body>
+</html>
