@@ -129,27 +129,30 @@
         .btn-icon {
             width: 34px;
             height: 34px;
-            background: #1a1a1a;
-            border: 1px solid #333;
+            background: #111;
+            border: 1px solid #2b2b2b;
             border-radius: 4px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #666;
+            color: #8d8d8d;
             font-size: 16px;
             transition: all 0.2s;
         }
 
-        .btn-icon:hover {
-            border-color: #555;
-            background: #222;
-            color: #999;
+        .btn-icon:hover:not(:disabled) {
+            border-color: #444;
+            background: #1d1d1d;
+            color: #c5c5c5;
         }
 
         .btn-icon:disabled {
-            opacity: 0.5;
+            opacity: 0.45;
             cursor: not-allowed;
+            color: #555;
+            border-color: #222;
+            background: #0f0f0f;
         }
 
         /* Main Content */
