@@ -390,6 +390,10 @@
             const getDeletedIdsKey = (user) => `noterok_deleted_${user}`;
             const getLocalSessionKey = () => 'noterok_user';
 
+            const sortNotesByCreatedAt = (noteList) => {
+                return [...noteList].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            };
+
             const normalizeTitle = (title) => {
                 return title.trim().replace(/\s+/g, ' ');
             };
@@ -663,13 +667,14 @@
             // Cargar notas
             const loadNotes = async (user) => {
                 try {
-                    const localNotes = loadNotesFromLocal(user);
+                    const localNotes = sortNotesByCreatedAt(loadNotesFromLocal(user));
 
                     if (!navigator.onLine) {
                         setNotes(localNotes);
                         if (localNotes.length > 0) {
                             setCurrentNoteId(localNotes[0].id);
                             setNoteContent(localNotes[0].content);
+                            setTimeout(() => textareaRef.current?.focus(), 100);
                         }
                         return;
                     }
@@ -678,7 +683,7 @@
                         .from('notes')
                         .select('id, title, content, created_at, updated_at')
                         .eq('user_id', user)
-                        .order('updated_at', { ascending: false });
+                        .order('created_at', { ascending: false });
 
                     if (error) {
                         throw error;
@@ -696,16 +701,18 @@
                     if (notesToUse.length > 0) {
                         setCurrentNoteId(notesToUse[0].id);
                         setNoteContent(notesToUse[0].content);
+                        setTimeout(() => textareaRef.current?.focus(), 100);
                     }
 
                     saveNotesToLocal(user, notesToUse);
                 } catch (err) {
                     console.error('Error cargando notas:', err);
-                    const localNotes = loadNotesFromLocal(user);
+                    const localNotes = sortNotesByCreatedAt(loadNotesFromLocal(user));
                     if (localNotes.length > 0) {
                         setNotes(localNotes);
                         setCurrentNoteId(localNotes[0].id);
                         setNoteContent(localNotes[0].content);
+                        setTimeout(() => textareaRef.current?.focus(), 100);
                     } else {
                         setNotes([]);
                         setCurrentNoteId(null);
