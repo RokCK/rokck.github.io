@@ -125,7 +125,8 @@
         .mobile-menu-toggle {
             position: fixed;
             top: 12px;
-            left: 12px;
+            right: 12px;
+            left: auto;
             z-index: 101;
             width: 40px;
             height: 40px;
@@ -155,6 +156,8 @@
 
             .mobile-menu-toggle {
                 display: flex;
+                right: 12px;
+                left: auto;
             }
 
             .editor-textarea {
@@ -583,6 +586,9 @@
                 const nextVisible = !panelVisible;
                 setPanelVisible(nextVisible);
                 savePanelVisibility(nextVisible);
+                if (!nextVisible) {
+                    setModalOpen(false);
+                }
             };
 
             const openNotesMenu = () => setModalOpen(true);
