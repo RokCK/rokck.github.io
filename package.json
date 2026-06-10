@@ -1,0 +1,30 @@
+{
+  "name": "noted",
+  "version": "0.1.0",
+  "description": "Desktop wrapper for the noted web app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.rokck.noted",
+    "productName": "noted",
+    "icon": "build/icon.icns",
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.productivity"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/**/*",
+      "!package-lock.json"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^26.0.0",
+    "electron-builder": "^24.6.0"
+  }
+}

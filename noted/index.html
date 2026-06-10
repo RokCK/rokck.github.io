@@ -575,7 +575,7 @@
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpnb2hhd25md2JoeXV1Ymd6aGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2NjExNTQsImV4cCI6MjA4MzIzNzE1NH0.3AF50DVfjnXhlx_chrPFeVXtnhRvFPhreZFq30y1mSY';
         const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-        const NoteRok = () => {
+        const Noted = () => {
             const [username, setUsername] = useState('');
             const [inputUsername, setInputUsername] = useState('');
             const [inputPassword, setInputPassword] = useState('');
@@ -593,10 +593,14 @@
             const [dragOverNoteId, setDragOverNoteId] = useState(null);
             const textareaRef = useRef(null);
 
-            const getLocalNotesKey = (user) => `noterok_notes_${user}`;
-            const getPanelVisibilityKey = () => 'noterok_panel_visible';
-            const getDeletedIdsKey = (user) => `noterok_deleted_${user}`;
-            const getLocalSessionKey = () => 'noterok_user';
+            const getLocalNotesKey = (user) => `noted_notes_${user}`;
+            const getOldLocalNotesKey = (user) => `noterok_notes_${user}`;
+            const getPanelVisibilityKey = () => 'noted_panel_visible';
+            const getOldPanelVisibilityKey = () => 'noterok_panel_visible';
+            const getDeletedIdsKey = (user) => `noted_deleted_${user}`;
+            const getOldDeletedIdsKey = (user) => `noterok_deleted_${user}`;
+            const getLocalSessionKey = () => 'noted_user';
+            const getOldLocalSessionKey = () => 'noterok_user';
 
             const sortNotesByCreatedAt = (noteList) => {
                 return [...noteList].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -671,7 +675,7 @@
 
             const loadNotesFromLocal = (user) => {
                 if (!user) return [];
-                const raw = localStorage.getItem(getLocalNotesKey(user));
+                const raw = localStorage.getItem(getLocalNotesKey(user)) ?? localStorage.getItem(getOldLocalNotesKey(user));
                 if (!raw) return [];
                 try {
                     const parsed = JSON.parse(raw);
@@ -691,7 +695,7 @@
 
             const loadDeletedIds = (user) => {
                 if (!user) return [];
-                const raw = localStorage.getItem(getDeletedIdsKey(user));
+                const raw = localStorage.getItem(getDeletedIdsKey(user)) ?? localStorage.getItem(getOldDeletedIdsKey(user));
                 if (!raw) return [];
                 try {
                     return JSON.parse(raw);
@@ -1040,7 +1044,7 @@
                         return;
                     }
 
-                    localStorage.setItem('noterok_user', user);
+                    localStorage.setItem(getLocalSessionKey(), user);
                     setUsername(user);
                     setLoginError('');
                     setInputUsername('');
@@ -1322,7 +1326,8 @@
 
             // Logout
             const handleLogout = () => {
-                localStorage.removeItem('noterok_user');
+                localStorage.removeItem(getLocalSessionKey());
+                localStorage.removeItem(getOldLocalSessionKey());
                 setUsername('');
                 setNotes([]);
                 setCurrentNoteId(null);
@@ -1333,8 +1338,8 @@
 
             // Verificar sesión guardada
             useEffect(() => {
-                const savedUsername = localStorage.getItem('noterok_user');
-                const savedVisibility = localStorage.getItem(getPanelVisibilityKey());
+                const savedUsername = localStorage.getItem(getLocalSessionKey()) ?? localStorage.getItem(getOldLocalSessionKey());
+                const savedVisibility = localStorage.getItem(getPanelVisibilityKey()) ?? localStorage.getItem(getOldPanelVisibilityKey());
                 if (savedVisibility !== null) {
                     setPanelVisible(JSON.parse(savedVisibility));
                 }
@@ -1588,7 +1593,7 @@
             );
         };
 
-        ReactDOM.render(<NoteRok />, document.getElementById('root'));
+        ReactDOM.render(<Noted />, document.getElementById('root'));
     </script>
 </body>
 </html>
