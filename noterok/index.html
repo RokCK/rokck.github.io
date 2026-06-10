@@ -300,11 +300,31 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: relative;
+            min-height: 64px;
         }
 
         .modal-header h3 {
             color: #fff;
             font-size: 16px;
+        }
+
+        .modal-header .modal-new-btn {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            min-width: 140px;
+            height: 44px;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 15px;
+            justify-content: center;
+            background: #111;
+            border: 1px solid #2b2b2b;
+            color: #cfcfcf;
+            display: flex;
+            align-items: center;
         }
 
         .close-modal-btn {
@@ -1337,6 +1357,13 @@
                     <div className={`notes-modal ${modalOpen ? 'show' : ''}`}>
                         <div className="modal-header">
                             <h3>v1.0</h3>
+                            <button
+                                className="modal-new-btn"
+                                onClick={createNewNote}
+                                title="Nueva nota"
+                            >
+                                +
+                            </button>
                             <div className="toolbar-group">
                                 <button 
                                     className="close-modal-btn"
@@ -1348,18 +1375,9 @@
                         </div>
 
                         <div className="modal-content">
-                            <div style={{display: 'flex', justifyContent: 'center', padding: 12}}>
-                                <button
-                                    className="btn-icon modal-new-btn"
-                                    onClick={createNewNote}
-                                    title="Nueva nota"
-                                >
-                                    +
-                                </button>
-                            </div>
                             {notes.length === 0 ? (
                                 <div className="empty-state" style={{height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                                    {/* minimal empty state - only + button above */}
+                                    {/* minimal empty state - new button is in header */}
                                 </div>
                             ) : (
                                 <div className="notes-list">
