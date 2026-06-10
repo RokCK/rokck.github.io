@@ -1072,8 +1072,11 @@
                 try {
                     setIsLoading(true);
 
-                    const noteCount = notes.length + 1;
-                    const newTitle = `Nota ${noteCount}`;
+                    const emptyCurrentNote = notes.find(n => n.id === currentNoteId && n.isNew && n.content.trim() === '');
+                    const baseNotes = emptyCurrentNote ? notes.filter(n => n.id !== currentNoteId) : notes;
+                    const noteCount = baseNotes.length + 1;
+                    const baseTitle = `Nota ${noteCount}`;
+                    const newTitle = getUniqueTitle(baseTitle);
                     const noteId = crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}`;
                     const newNote = {
                         id: noteId,
@@ -1084,9 +1087,6 @@
                         needsSync: true,
                         isNew: true
                     };
-
-                    const emptyCurrentNote = notes.find(n => n.id === currentNoteId && n.isNew && n.content.trim() === '');
-                    const baseNotes = emptyCurrentNote ? notes.filter(n => n.id !== currentNoteId) : notes;
                     const newNotes = [newNote, ...baseNotes];
                     setNotes(newNotes);
                     setCurrentNoteId(newNote.id);
@@ -1287,14 +1287,6 @@
                                 <div className="toolbar-group">
                                     <button 
                                         className="btn-icon"
-                                        onClick={createNewNote}
-                                        disabled={isLoading}
-                                        title="Nueva nota"
-                                    >
-                                        +
-                                    </button>
-                                    <button 
-                                        className="btn-icon"
                                         onClick={() => setModalOpen(!modalOpen)}
                                         disabled={isLoading}
                                         title="Menú de notas"
@@ -1335,14 +1327,6 @@
                             <h3>v1.0</h3>
                             <div className="toolbar-group">
                                 <button 
-                                    className="btn-icon"
-                                    onClick={createNewNote}
-                                    disabled={isLoading}
-                                    title="Nueva nota"
-                                >
-                                    +
-                                </button>
-                                <button 
                                     className="close-modal-btn"
                                     onClick={() => setModalOpen(false)}
                                 >
@@ -1352,15 +1336,18 @@
                         </div>
 
                         <div className="modal-content">
+                            <div style={{display: 'flex', justifyContent: 'center', padding: 12}}>
+                                <button
+                                    className="btn-icon"
+                                    onClick={createNewNote}
+                                    title="Nueva nota"
+                                >
+                                    +
+                                </button>
+                            </div>
                             {notes.length === 0 ? (
-                                <div className="empty-state">
-                                    <button
-                                        className="btn-icon"
-                                        onClick={createNewNote}
-                                        title="Nueva nota"
-                                    >
-                                        +
-                                    </button>
+                                <div className="empty-state" style={{height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                                    {/* minimal empty state - only + button above */}
                                 </div>
                             ) : (
                                 <div className="notes-list">
@@ -1396,11 +1383,12 @@
                             )}
                         </div>
 
-                        <div className="user-info">
-                            <strong>{username}</strong>
-                            <div className="dev-credit">
-                                <span className="dev-icon">💻</span>
-                                <a href="https://www.rokck.com" target="_blank" rel="noopener noreferrer">Dev by RokCK</a>
+                        <div className="user-info" style={{display: 'flex', alignItems: 'center'}}>
+                            <strong style={{marginRight:8}}>{username}</strong>
+                            <div style={{marginLeft: 'auto'}}>
+                                <a href="https://www.rokck.com" target="_blank" rel="noopener noreferrer" title="Dev by RokCK" style={{color: '#fff', textDecoration:'none'}}>
+                                    <span className="dev-icon" style={{background: 'transparent', border: 'none', color: '#fff'}}>💻</span>
+                                </a>
                             </div>
                         </div>
                     </div>
