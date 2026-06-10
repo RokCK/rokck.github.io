@@ -379,8 +379,48 @@
             background: #0a0a0a;
             border: 1px solid #333;
             border-radius: 4px;
-            cursor: pointer;
+            cursor: grab;
+            user-select: none;
             transition: all 0.2s;
+        }
+
+        .note-item:active {
+            cursor: grabbing;
+        }
+
+        .note-item.dragging {
+            opacity: 0.5;
+        }
+
+        .note-item.drag-over {
+            border-color: #777;
+            background: #111;
+        }
+
+        .note-item-handle {
+            margin-right: 10px;
+            color: #888;
+            font-size: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            flex-shrink: 0;
+        }
+
+        .note-item-content {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        .note-item-title {
+            color: #999;
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .note-item:hover {
@@ -393,17 +433,8 @@
             background: #222;
         }
 
-        .note-item-content {
-            flex: 1;
-            overflow: hidden;
-        }
-
-        .note-item-title {
-            color: #999;
-            font-size: 13px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+        .note-item.active .note-item-title {
+            color: #fff;
         }
 
         .note-item.active .note-item-title {
@@ -549,6 +580,8 @@
             const [clipboardText, setClipboardText] = useState('');
             const [panelVisible, setPanelVisible] = useState(true);
             const [isMobile, setIsMobile] = useState(false);
+            const [draggedNoteId, setDraggedNoteId] = useState(null);
+            const [dragOverNoteId, setDragOverNoteId] = useState(null);
             const textareaRef = useRef(null);
 
             const getLocalNotesKey = (user) => `noterok_notes_${user}`;
@@ -592,17 +625,16 @@
             };
 
             const mergeLocalAndServerNotes = (serverNotes, localNotes) => {
-                const localById = new Map(localNotes.map(note => [note.id, note]));
-                const mergedServer = serverNotes.map(serverNote => {
-                    const localNote = localById.get(serverNote.id);
-                    if (localNote && localNote.needsSync) {
-                        return localNote;
+                const localIds = new Set(localNotes.map(note => note.id));
+                const orderedLocal = localNotes.map(localNote => {
+                    const serverNote = serverNotes.find(sn => sn.id === localNote.id);
+                    if (serverNote && !localNote.needsSync) {
+                        return serverNote;
                     }
-                    return serverNote;
+                    return localNote;
                 });
-                const serverIds = new Set(serverNotes.map(note => note.id));
-                const extraLocalNotes = localNotes.filter(note => !serverIds.has(note.id));
-                return sortNotesByCreatedAt([...mergedServer, ...extraLocalNotes]);
+                const extraServerNotes = serverNotes.filter(serverNote => !localIds.has(serverNote.id));
+                return [...orderedLocal, ...extraServerNotes];
             };
 
             const buildVersionedTitle = (title, existingTitles) => {
@@ -1001,7 +1033,7 @@
             // Cargar notas
             const loadNotes = async (user) => {
                 try {
-                    const localNotes = sortNotesByCreatedAt(loadNotesFromLocal(user));
+                    const localNotes = loadNotesFromLocal(user);
 
                     if (!navigator.onLine) {
                         setNotes(localNotes);
@@ -1062,7 +1094,7 @@
                     saveNotesToLocal(user, notesToUse);
                 } catch (err) {
                     console.error('Error cargando notas:', err);
-                    const localNotes = sortNotesByCreatedAt(loadNotesFromLocal(user));
+                    const localNotes = loadNotesFromLocal(user);
                     if (localNotes.length > 0) {
                         setNotes(localNotes);
                         setCurrentNoteId(localNotes[0].id);
@@ -1160,6 +1192,53 @@
             };
 
             // Eliminar nota
+            const reorderNotes = (draggedId, targetId) => {
+                const draggedIndex = notes.findIndex(note => note.id === draggedId);
+                const targetIndex = notes.findIndex(note => note.id === targetId);
+                if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return;
+
+                const updatedNotes = [...notes];
+                const [draggedNote] = updatedNotes.splice(draggedIndex, 1);
+                const insertIndex = updatedNotes.findIndex(note => note.id === targetId);
+                updatedNotes.splice(insertIndex, 0, draggedNote);
+                setNotes(updatedNotes);
+                saveNotesToLocal(username, updatedNotes);
+            };
+
+            const handleDragStart = (noteId, event) => {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', noteId);
+                setDraggedNoteId(noteId);
+            };
+
+            const handleDragOver = (noteId, event) => {
+                event.preventDefault();
+                if (noteId !== draggedNoteId) {
+                    setDragOverNoteId(noteId);
+                }
+            };
+
+            const handleDragLeave = (noteId) => {
+                if (dragOverNoteId === noteId) {
+                    setDragOverNoteId(null);
+                }
+            };
+
+            const handleDrop = (noteId, event) => {
+                event.preventDefault();
+                const draggedId = event.dataTransfer.getData('text/plain');
+                if (draggedId && draggedId !== noteId) {
+                    reorderNotes(draggedId, noteId);
+                }
+                setDraggedNoteId(null);
+                setDragOverNoteId(null);
+            };
+
+            const handleDragEnd = () => {
+                setDraggedNoteId(null);
+                setDragOverNoteId(null);
+            };
+
             const deleteNote = async (noteId, e) => {
                 e.stopPropagation();
 
@@ -1421,10 +1500,17 @@
                                     {notes.map(note => (
                                         <div
                                             key={note.id}
-                                            className={`note-item ${currentNoteId === note.id ? 'active' : ''}`}
+                                            className={`note-item ${currentNoteId === note.id ? 'active' : ''} ${draggedNoteId === note.id ? 'dragging' : ''} ${dragOverNoteId === note.id ? 'drag-over' : ''}`}
+                                            draggable
                                             onClick={() => selectNote(note.id)}
+                                            onDragStart={(e) => handleDragStart(note.id, e)}
+                                            onDragOver={(e) => handleDragOver(note.id, e)}
+                                            onDragLeave={() => handleDragLeave(note.id)}
+                                            onDrop={(e) => handleDrop(note.id, e)}
+                                            onDragEnd={handleDragEnd}
                                         >
                                             <div className="note-item-content">
+                                                <div className="note-item-handle" title="Arrastra para reordenar">≡</div>
                                                 <div className="note-item-title">{note.title}</div>
                                             </div>
                                             <button
