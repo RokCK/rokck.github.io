@@ -467,6 +467,7 @@
             const [clipboardAvailable, setClipboardAvailable] = useState(false);
             const [clipboardText, setClipboardText] = useState('');
             const [panelVisible, setPanelVisible] = useState(true);
+            const [isMobile, setIsMobile] = useState(false);
             const textareaRef = useRef(null);
 
             const getLocalNotesKey = (user) => `noterok_notes_${user}`;
@@ -591,7 +592,7 @@
                 }
             };
 
-            const openNotesMenu = () => setModalOpen(true);
+            const openNotesMenu = () => setModalOpen((prev) => !prev);
 
             const refreshClipboardState = async () => {
                 if (!navigator.clipboard || !navigator.clipboard.readText) {
@@ -1117,7 +1118,7 @@
                     const key = event.key.toLowerCase();
                     if (key === 'h') {
                         event.preventDefault();
-                        togglePanelVisibility();
+                        if (!isMobile) togglePanelVisibility();
                     }
                     if (key === 'n') {
                         event.preventDefault();
@@ -1157,6 +1158,16 @@
                     loadNotes(savedUsername);
                 }
                 refreshClipboardState();
+            }, []);
+
+            useEffect(() => {
+                const updateIsMobile = () => {
+                    const mediaQuery = window.matchMedia('(max-width: 760px)');
+                    setIsMobile(mediaQuery.matches);
+                };
+                updateIsMobile();
+                window.addEventListener('resize', updateIsMobile);
+                return () => window.removeEventListener('resize', updateIsMobile);
             }, []);
 
             // Re-sincronizar cuando vuelva la conexión
@@ -1214,14 +1225,16 @@
             // Editor Screen
             return (
                 <div className="editor-container">
-                    <button
-                        className="mobile-menu-toggle btn-icon"
-                        onClick={openNotesMenu}
-                        disabled={isLoading}
-                        title="Menú de notas"
-                    >
-                        ☰
-                    </button>
+                    {isMobile && (
+                        <button
+                            className="mobile-menu-toggle btn-icon"
+                            onClick={openNotesMenu}
+                            disabled={isLoading}
+                            title={modalOpen ? 'Cerrar notas' : 'Menú de notas'}
+                        >
+                            {modalOpen ? '×' : '☰'}
+                        </button>
+                    )}
                     {panelVisible && (
                         <div className="editor-header">
                             <div className="toolbar-group">
@@ -1244,6 +1257,26 @@
                                     </button>
                                 )}
                             </div>
+                            {!isMobile && (
+                                <div className="toolbar-group">
+                                    <button 
+                                        className="btn-icon"
+                                        onClick={createNewNote}
+                                        disabled={isLoading}
+                                        title="Nueva nota"
+                                    >
+                                        +
+                                    </button>
+                                    <button 
+                                        className="btn-icon"
+                                        onClick={() => setModalOpen(!modalOpen)}
+                                        disabled={isLoading}
+                                        title="Menú de notas"
+                                    >
+                                        ☰
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
 
