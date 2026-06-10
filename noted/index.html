@@ -157,10 +157,36 @@
             justify-content: center;
         }
 
+        .mobile-save-btn {
+            position: fixed;
+            left: 12px;
+            bottom: 12px;
+            z-index: 101;
+            width: auto;
+            min-width: 88px;
+            height: 40px;
+            padding: 0 14px;
+            border-radius: 10px;
+            background: #111;
+            border: 1px solid #2b2b2b;
+            color: #cfcfcf;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
         .mobile-menu-toggle:hover {
             border-color: #444;
             background: #1d1d1d;
             color: #c5c5c5;
+        }
+
+        .mobile-save-btn:hover:not(:disabled) {
+            border-color: #444;
+            background: #1d1d1d;
+            color: #fff;
         }
 
         @media (max-width: 760px) {
@@ -176,6 +202,10 @@
                 display: flex;
                 right: 12px;
                 left: auto;
+            }
+
+            .mobile-save-btn {
+                display: flex;
             }
 
             .editor-textarea {
@@ -570,6 +600,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         const { createClient } = supabase;
+        const isMacPlatform = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
 
         const supabaseUrl = 'https://zgohawnfwbhyuubgzhit.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpnb2hhd25md2JoeXV1Ymd6aGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2NjExNTQsImV4cCI6MjA4MzIzNzE1NH0.3AF50DVfjnXhlx_chrPFeVXtnhRvFPhreZFq30y1mSY';
@@ -589,6 +620,7 @@
             const [clipboardText, setClipboardText] = useState('');
             const [panelVisible, setPanelVisible] = useState(true);
             const [isMobile, setIsMobile] = useState(false);
+            const [isSaving, setIsSaving] = useState(false);
             const [draggedNoteId, setDraggedNoteId] = useState(null);
             const [dragOverNoteId, setDragOverNoteId] = useState(null);
             const textareaRef = useRef(null);
@@ -602,8 +634,14 @@
             const getLocalSessionKey = () => 'noted_user';
             const getOldLocalSessionKey = () => 'noterok_user';
 
-            const sortNotesByCreatedAt = (noteList) => {
-                return [...noteList].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const getNoteTimestamp = (note) => {
+                const rawTimestamp = note?.updated_at || note?.created_at || 0;
+                const timestamp = new Date(rawTimestamp).getTime();
+                return Number.isFinite(timestamp) ? timestamp : 0;
+            };
+
+            const sortNotesByUpdatedAt = (noteList) => {
+                return [...noteList].sort((a, b) => getNoteTimestamp(b) - getNoteTimestamp(a));
             };
 
             const normalizeTitle = (title) => {
@@ -638,26 +676,21 @@
             };
 
             const mergeLocalAndServerNotes = (serverNotes, localNotes) => {
-                const localIds = new Set(localNotes.map(note => note.id));
-                const orderedLocal = localNotes.map(localNote => {
-                    const serverNote = serverNotes.find(sn => sn.id === localNote.id);
-                    if (serverNote && !localNote.needsSync) {
-                        return serverNote;
-                    }
-                    return localNote;
-                });
-                const extraServerNotes = serverNotes.filter(serverNote => !localIds.has(serverNote.id));
-                return [...orderedLocal, ...extraServerNotes];
-            };
+                const localMap = new Map(localNotes.map(note => [note.id, note]));
+                const serverMap = new Map(serverNotes.map(note => [note.id, note]));
+                const allIds = new Set([...localMap.keys(), ...serverMap.keys()]);
 
-            const buildVersionedTitle = (title, existingTitles) => {
-                const normalized = normalizeTitle(title).replace(/\s*\(v\d+\)$/i, '');
-                let version = 2;
-                const exists = (candidate) => existingTitles.some(t => normalizeTitle(t).toLowerCase() === normalizeTitle(candidate).toLowerCase());
-                while (exists(`${normalized} (v${version})`)) {
-                    version += 1;
-                }
-                return `${normalized} (v${version})`;
+                return sortNotesByUpdatedAt([...allIds].map((id) => {
+                    const localNote = localMap.get(id);
+                    const serverNote = serverMap.get(id);
+
+                    if (!localNote) return serverNote;
+                    if (!serverNote) return localNote;
+
+                    return getNoteTimestamp(localNote) >= getNoteTimestamp(serverNote)
+                        ? localNote
+                        : serverNote;
+                }));
             };
 
             const getWordCount = (text) => {
@@ -670,7 +703,7 @@
                 const cleanNotes = Array.isArray(noteList)
                     ? noteList.filter(note => !(note.isNew && note.content.trim() === '' && note.id !== activeId))
                     : [];
-                localStorage.setItem(getLocalNotesKey(user), JSON.stringify(cleanNotes));
+                localStorage.setItem(getLocalNotesKey(user), JSON.stringify(sortNotesByUpdatedAt(cleanNotes)));
             };
 
             const loadNotesFromLocal = (user) => {
@@ -680,7 +713,7 @@
                 try {
                     const parsed = JSON.parse(raw);
                     return Array.isArray(parsed)
-                        ? parsed.filter(note => note.content?.trim() !== '' || note.isNew)
+                        ? sortNotesByUpdatedAt(parsed.filter(note => note.content?.trim() !== '' || note.isNew))
                         : [];
                 } catch (err) {
                     console.error('Error parseando notas locales:', err);
@@ -688,7 +721,7 @@
                 }
             };
 
-                    const saveDeletedIds = (user, deletedIds) => {
+            const saveDeletedIds = (user, deletedIds) => {
                 if (!user) return;
                 localStorage.setItem(getDeletedIdsKey(user), JSON.stringify(deletedIds));
             };
@@ -718,6 +751,43 @@
             const updateLocalNotes = (user, updatedNotes) => {
                 setNotes(updatedNotes);
                 saveNotesToLocal(user, updatedNotes);
+            };
+
+            const saveCurrentNote = async () => {
+                if (!username || !currentNoteId || isSaving) return;
+
+                const currentNote = notes.find(note => note.id === currentNoteId);
+                if (!currentNote) return;
+
+                const nextUpdatedAt = new Date().toISOString();
+                const nextTitle = getUniqueTitle(getTitleFromContent(noteContent, currentNote.title), currentNoteId);
+                const updatedNote = {
+                    ...currentNote,
+                    content: noteContent,
+                    title: nextTitle,
+                    updated_at: nextUpdatedAt,
+                    needsSync: true
+                };
+
+                const updatedNotes = sortNotesByUpdatedAt([
+                    updatedNote,
+                    ...notes.filter(note => note.id !== currentNoteId)
+                ]);
+
+                setIsSaving(true);
+                try {
+                    setNotes(updatedNotes);
+                    saveNotesToLocal(username, updatedNotes, currentNoteId);
+
+                    if (navigator.onLine) {
+                        const syncedNotes = await syncPendingChanges(username, updatedNotes);
+                        if (Array.isArray(syncedNotes)) {
+                            setNotes(syncedNotes);
+                        }
+                    }
+                } finally {
+                    setIsSaving(false);
+                }
             };
 
             const savePanelVisibility = (visible) => {
@@ -785,8 +855,6 @@
                     setCurrentNoteId(newNote.id);
                     setNoteContent(newNote.content);
                     setTimeout(() => textareaRef.current?.focus(), 100);
-                    saveNotesToLocal(username, newNotes);
-                    if (navigator.onLine) syncPendingChanges(username, newNotes);
                 } catch (err) {
                     console.error('Error pegando nota:', err);
                 }
@@ -802,6 +870,8 @@
                 for (const note of notesToSync) {
                     try {
                         const localIndex = updatedNotes.findIndex(n => n.id === note.id);
+                        if (localIndex === -1) continue;
+
                         if (note.isNew) {
                             const { data, error } = await supabaseClient
                                 .from('notes')
@@ -836,38 +906,16 @@
                             }
 
                             const serverUpdatedAt = serverNote?.updated_at;
-                            const hasConflict = serverUpdatedAt && note.server_updated_at && new Date(serverUpdatedAt) > new Date(note.server_updated_at);
+                            const localUpdatedAt = getNoteTimestamp(note);
+                            const remoteUpdatedAt = serverUpdatedAt ? new Date(serverUpdatedAt).getTime() : 0;
 
-                            if (serverNote && hasConflict) {
-                                const existingTitles = updatedNotes.map(n => n.title);
-                                const versionedTitle = buildVersionedTitle(note.title, existingTitles);
-                                const newNoteId = crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-                                const { data, error } = await supabaseClient
-                                    .from('notes')
-                                    .insert({
-                                        id: newNoteId,
-                                        user_id: user,
-                                        title: versionedTitle,
-                                        content: note.content,
-                                        created_at: new Date().toISOString(),
-                                        updated_at: note.updated_at
-                                    })
-                                    .select()
-                                    .single();
-
-                                if (error) throw error;
-
+                            if (serverNote && remoteUpdatedAt > localUpdatedAt) {
                                 updatedNotes[localIndex] = {
-                                    ...note,
-                                    id: data.id,
-                                    title: data.title,
+                                    ...serverNote,
                                     isNew: false,
                                     needsSync: false,
-                                    server_updated_at: data.updated_at
+                                    server_updated_at: serverNote.updated_at
                                 };
-                                if (currentNoteId === note.id) {
-                                    setCurrentNoteId(data.id);
-                                }
                             } else {
                                 const { error } = await supabaseClient
                                     .from('notes')
@@ -915,26 +963,9 @@
                 const cleanedNotes = updatedNotes
                     .filter(note => !note._deleted)
                     .filter(note => !(note.isNew && note.content.trim() === ''));
-                cleanedNotes.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-                updateLocalNotes(user, cleanedNotes);
-            };
-
-            const updateDraftNote = (noteId, newContent) => {
-                const updatedNotes = notes.map(note => {
-                    if (note.id !== noteId) return note;
-                    if (note.isNew && newContent.trim() === '') return note;
-                    const baseTitle = getTitleFromContent(newContent, note.title);
-                    return {
-                        ...note,
-                        content: newContent,
-                        title: getUniqueTitle(baseTitle, noteId),
-                        updated_at: new Date().toISOString(),
-                        needsSync: true
-                    };
-                });
-                const notesWithTop = moveNoteToTop(noteId, updatedNotes);
-                setNotes(notesWithTop);
-                saveNotesToLocal(username, notesWithTop);
+                const sortedNotes = sortNotesByUpdatedAt(cleanedNotes);
+                updateLocalNotes(user, sortedNotes);
+                return sortedNotes;
             };
 
             const downloadNoteAsTxt = (note) => {
@@ -948,52 +979,6 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-            };
-
-            const markNoteChanged = (noteId, newContent) => {
-                const note = notes.find(n => n.id === noteId);
-                if (!note) return;
-
-                if (note.isNew && newContent.trim() === '') {
-                    if (currentNoteId === noteId) {
-                        // Mantener la nota abierta mientras el usuario está escribiendo
-                        return;
-                    }
-                    const updatedNotes = notes.filter(n => n.id !== noteId);
-                    if (currentNoteId === noteId) {
-                        const nextNote = updatedNotes[0];
-                        setCurrentNoteId(nextNote ? nextNote.id : null);
-                        setNoteContent(nextNote ? nextNote.content : '');
-                    }
-                    updateLocalNotes(username, updatedNotes);
-                    return;
-                }
-
-                if (!note.needsSync && note.content === newContent) return;
-
-                const updatedNotes = notes.map(note => {
-                    if (note.id !== noteId) return note;
-                    const baseTitle = getTitleFromContent(newContent, note.title);
-                    return {
-                        ...note,
-                        content: newContent,
-                        title: getUniqueTitle(baseTitle, noteId),
-                        updated_at: new Date().toISOString(),
-                        needsSync: true
-                    };
-                });
-                const notesWithTop = moveNoteToTop(noteId, updatedNotes);
-                updateLocalNotes(username, notesWithTop);
-                if (navigator.onLine) syncPendingChanges(username, notesWithTop);
-            };
-
-            const addLocalNote = (newNote) => {
-                const updatedNotes = [newNote, ...notes];
-                setNotes(updatedNotes);
-                if (navigator.onLine && newNote.content.trim() !== '') {
-                    syncPendingChanges(username, updatedNotes);
-                }
-                return updatedNotes;
             };
 
             const removeLocalNote = (noteId) => {
@@ -1079,7 +1064,7 @@
                         .from('notes')
                         .select('id, title, content, created_at, updated_at')
                         .eq('user_id', user)
-                        .order('created_at', { ascending: false });
+                        .order('updated_at', { ascending: false });
 
                     if (error) {
                         throw error;
@@ -1163,26 +1148,23 @@
                 }
             };
 
-            // Autoguardado
             useEffect(() => {
-                if (!username || !currentNoteId) return;
+                if (!username) return;
+                saveNotesToLocal(username, notes);
+            }, [username, notes]);
 
-                const timer = setTimeout(() => {
-                    markNoteChanged(currentNoteId, noteContent);
-                }, 2000);
-
-                return () => clearTimeout(timer);
-            }, [noteContent, currentNoteId, username]);
+            useEffect(() => {
+                if (!currentNoteId) return;
+                const currentNote = notes.find(note => note.id === currentNoteId);
+                if (currentNote && currentNote.content !== noteContent) {
+                    setNoteContent(currentNote.content || '');
+                }
+            }, [currentNoteId, notes]);
 
             useEffect(() => {
                 if (!currentNoteId) return;
                 setTimeout(() => textareaRef.current?.focus(), 0);
             }, [currentNoteId]);
-
-            useEffect(() => {
-                if (!username) return;
-                saveNotesToLocal(username, notes);
-            }, [username, notes]);
 
             // Crear nueva nota
             const createNewNote = async () => {
@@ -1209,11 +1191,6 @@
                     setCurrentNoteId(newNote.id);
                     setNoteContent('');
                     setTimeout(() => textareaRef.current?.focus(), 100);
-                    saveNotesToLocal(username, newNotes, newNote.id);
-
-                    if (navigator.onLine && newNote.content.trim() !== '') {
-                        await syncPendingChanges(username, newNotes);
-                    }
                 } catch (err) {
                     console.error('Error creando nota:', err);
                 } finally {
@@ -1304,8 +1281,14 @@
 
             useEffect(() => {
                 const handleGlobalShortcuts = (event) => {
-                    if (!event.ctrlKey) return;
                     const key = event.key.toLowerCase();
+                    const saveShortcutPressed = isMacPlatform ? event.metaKey : event.ctrlKey;
+                    if (saveShortcutPressed && key === 's') {
+                        event.preventDefault();
+                        saveCurrentNote();
+                        return;
+                    }
+                    if (!(event.ctrlKey || event.metaKey)) return;
                     if (key === 'h') {
                         event.preventDefault();
                         if (!isMobile) togglePanelVisibility();
@@ -1322,7 +1305,7 @@
 
                 window.addEventListener('keydown', handleGlobalShortcuts);
                 return () => window.removeEventListener('keydown', handleGlobalShortcuts);
-            }, [panelVisible, createNewNote]);
+            }, [panelVisible, createNewNote, saveCurrentNote, isMobile]);
 
             // Logout
             const handleLogout = () => {
@@ -1434,6 +1417,16 @@
                 <div className="editor-container">
                     {isMobile && (
                         <button
+                            className="mobile-save-btn btn-icon"
+                            onClick={saveCurrentNote}
+                            disabled={isLoading || isSaving || !currentNoteId}
+                            title="Guardar nota"
+                        >
+                            {isSaving ? '⏳' : 'Guardar'}
+                        </button>
+                    )}
+                    {isMobile && (
+                        <button
                             className="mobile-menu-toggle btn-icon"
                             onClick={openNotesMenu}
                             disabled={isLoading}
@@ -1485,11 +1478,7 @@
                             className="editor-textarea"
                             value={noteContent}
                             onChange={(e) => {
-                                const newContent = e.target.value;
-                                setNoteContent(newContent);
-                                if (currentNoteId) {
-                                    updateDraftNote(currentNoteId, newContent);
-                                }
+                                setNoteContent(e.target.value);
                             }}
                             disabled={!currentNoteId || isLoading}
                             autoFocus
