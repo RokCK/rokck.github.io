@@ -559,9 +559,6 @@
                 });
                 const serverIds = new Set(serverNotes.map(note => note.id));
                 const extraLocalNotes = localNotes.filter(note => !serverIds.has(note.id));
-                .notes-modal {
-                    position: fixed;
-                    top: 0;
                 return sortNotesByCreatedAt([...mergedServer, ...extraLocalNotes]);
             };
 
@@ -598,10 +595,7 @@
                 }
             };
 
-                    .notes-modal {
-                        width: 90%;
-                        max-width: 360px;
-            const saveDeletedIds = (user, deletedIds) => {
+                    const saveDeletedIds = (user, deletedIds) => {
                 if (!user) return;
                 localStorage.setItem(getDeletedIdsKey(user), JSON.stringify(deletedIds));
             };
