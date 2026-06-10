@@ -534,10 +534,10 @@
                 return `${normalized} (v${version})`;
             };
 
-            const saveNotesToLocal = (user, noteList) => {
+            const saveNotesToLocal = (user, noteList, activeId = currentNoteId) => {
                 if (!user) return;
                 const cleanNotes = Array.isArray(noteList)
-                    ? noteList.filter(note => !(note.isNew && note.content.trim() === '' && note.id !== currentNoteId))
+                    ? noteList.filter(note => !(note.isNew && note.content.trim() === '' && note.id !== activeId))
                     : [];
                 localStorage.setItem(getLocalNotesKey(user), JSON.stringify(cleanNotes));
             };
@@ -1066,7 +1066,7 @@
                     setCurrentNoteId(newNote.id);
                     setNoteContent('');
                     setTimeout(() => textareaRef.current?.focus(), 100);
-                    saveNotesToLocal(username, newNotes);
+                    saveNotesToLocal(username, newNotes, newNote.id);
 
                     if (navigator.onLine && newNote.content.trim() !== '') {
                         await syncPendingChanges(username, newNotes);
