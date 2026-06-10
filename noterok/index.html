@@ -277,6 +277,15 @@
             cursor: not-allowed;
         }
 
+        .word-counter {
+            position: absolute;
+            right: 18px;
+            bottom: 18px;
+            color: #7a7a7a;
+            font-size: 12px;
+            pointer-events: none;
+        }
+
         /* Modal Overlay */
         .modal-overlay {
             display: none;
@@ -645,6 +654,11 @@
                     version += 1;
                 }
                 return `${normalized} (v${version})`;
+            };
+
+            const getWordCount = (text) => {
+                if (!text) return 0;
+                return text.trim().split(/\s+/).filter(Boolean).length;
             };
 
             const saveNotesToLocal = (user, noteList, activeId = currentNoteId) => {
@@ -1354,6 +1368,8 @@
                 return () => window.removeEventListener('online', handleOnline);
             }, [username]);
 
+            const wordCount = getWordCount(noteContent);
+
             // Login Screen
             if (!username) {
                 return (
@@ -1473,6 +1489,11 @@
                             disabled={!currentNoteId || isLoading}
                             autoFocus
                         />
+                        {currentNoteId && (
+                            <div className="word-counter" title="Word count">
+                                {wordCount}
+                            </div>
+                        )}
                     </div>
 
                     {/* Modal Overlay */}
