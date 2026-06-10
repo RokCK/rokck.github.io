@@ -687,6 +687,16 @@
                 }
             };
 
+            const moveNoteToTop = (noteId, noteList) => {
+                const index = noteList.findIndex(note => note.id === noteId);
+                if (index === -1) return noteList;
+                if (index === 0) return noteList;
+                const updatedNotes = [...noteList];
+                const [note] = updatedNotes.splice(index, 1);
+                updatedNotes.unshift(note);
+                return updatedNotes;
+            };
+
             const updateLocalNotes = (user, updatedNotes) => {
                 setNotes(updatedNotes);
                 saveNotesToLocal(user, updatedNotes);
@@ -904,8 +914,9 @@
                         needsSync: true
                     };
                 });
-                setNotes(updatedNotes);
-                saveNotesToLocal(username, updatedNotes);
+                const notesWithTop = moveNoteToTop(noteId, updatedNotes);
+                setNotes(notesWithTop);
+                saveNotesToLocal(username, notesWithTop);
             };
 
             const downloadNoteAsTxt = (note) => {
@@ -953,8 +964,9 @@
                         needsSync: true
                     };
                 });
-                updateLocalNotes(username, updatedNotes);
-                if (navigator.onLine) syncPendingChanges(username, updatedNotes);
+                const notesWithTop = moveNoteToTop(noteId, updatedNotes);
+                updateLocalNotes(username, notesWithTop);
+                if (navigator.onLine) syncPendingChanges(username, notesWithTop);
             };
 
             const addLocalNote = (newNote) => {
