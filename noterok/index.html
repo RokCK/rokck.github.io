@@ -441,6 +441,32 @@
         .user-info strong {
             color: #999;
         }
+        .dev-credit {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #999;
+        }
+
+        .dev-credit a {
+            color: #999;
+            text-decoration: none;
+        }
+
+        .dev-icon {
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            background: #111;
+            border: 1px solid #2b2b2b;
+            color: #cfcfcf;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -1306,7 +1332,7 @@
                     {/* Notes Modal */}
                     <div className={`notes-modal ${modalOpen ? 'show' : ''}`}>
                         <div className="modal-header">
-                            <h3>Notas</h3>
+                            <h3>v1.0</h3>
                             <div className="toolbar-group">
                                 <button 
                                     className="btn-icon"
@@ -1328,7 +1354,13 @@
                         <div className="modal-content">
                             {notes.length === 0 ? (
                                 <div className="empty-state">
-                                    No hay notas. Toca el + para crear una.
+                                    <button
+                                        className="btn-icon"
+                                        onClick={createNewNote}
+                                        title="Nueva nota"
+                                    >
+                                        +
+                                    </button>
                                 </div>
                             ) : (
                                 <div className="notes-list">
@@ -1365,7 +1397,11 @@
                         </div>
 
                         <div className="user-info">
-                            Usuario: <strong>{username}</strong>
+                            <strong>{username}</strong>
+                            <div className="dev-credit">
+                                <span className="dev-icon">💻</span>
+                                <a href="https://www.rokck.com" target="_blank" rel="noopener noreferrer">Dev by RokCK</a>
+                            </div>
                         </div>
                     </div>
                 </div>
